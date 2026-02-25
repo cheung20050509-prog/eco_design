@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.env
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data files
+*.csv
+*.pkl
+*.parquet
+*.h5
+*.hdf5
+
+# Model files
+*.pth
+*.pt
+*.onnx
+
+# Output
+*.log
+nohup.out
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Large folders
+ecofinal/chronos-forecasting-main/
+ecofinal/金融数据分析与智能量化交易应用PPT_2025/
+ecofinal/金融数据分析与智能量化交易应用代码_2025/
+output/
