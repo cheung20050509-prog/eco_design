@@ -114,14 +114,13 @@ def main():
         '600588.SH',  # 用友网络
         '002230.SZ',  # 科大讯飞
         '601012.SH',  # 隆基绿能
-        '300750.SZ',  # 宁德时代
+        '002074.SZ',  # 国轩高科
         '002352.SZ',  # 顺丰控股
-        '601816.SH',  # 京沪高铁
+        '601100.SH',  # 恒立液压
         '000725.SZ',  # 京东方A
         '002371.SZ',  # 北方华创
         '600690.SH',  # 海尔智家
         '000100.SZ',  # TCL科技
-        '601138.SH',  # 工业富联
         '600406.SH',  # 国电南瑞
         '300014.SZ',  # 亿纬锂能
         '002594.SZ',  # 比亚迪
@@ -130,8 +129,7 @@ def main():
         # ========== 医药板块（15只）==========
         '600276.SH',  # 恒瑞医药
         '000538.SZ',  # 云南白药
-        '300760.SZ',  # 迈瑞医疗
-        '603259.SH',  # 药明康德
+        '601607.SH',  # 上海医药
         '000963.SZ',  # 华东医药
         '600196.SH',  # 复星医药
         '002007.SZ',  # 华兰生物
@@ -158,7 +156,7 @@ def main():
         '600188.SH',  # 兖矿能源
         '601985.SH',  # 中国核电
         '601225.SH',  # 陕西煤业
-        '600989.SH',  # 宝丰能源
+        '601898.SH',  # 中煤能源
         # ========== 地产/基建/交运（10只）==========
         '600048.SH',  # 保利发展
         '001979.SZ',  # 招商蛇口
@@ -172,24 +170,23 @@ def main():
         '601288.SH',  # 农业银行
         # ========== 通信/传媒（10只）==========
         '600050.SH',  # 中国联通
-        '601728.SH',  # 中国电信
+        '600522.SH',  # 中天科技
         '000063.SZ',  # 中兴通讯
         '002475.SZ',  # 立讯精密
         '600183.SH',  # 生益科技
         '002236.SZ',  # 大华股份
         '300413.SZ',  # 芒果超媒
-        '603501.SH',  # 韦尔股份
         '002049.SZ',  # 紫光国微
         '600745.SH',  # 闻泰科技
     ]
     
     data_module = DataAcquisition()
     
-    # 获取数据 - 7年数据(2018-2025)，确保所有股票都有完整数据
+    # 获取数据 - 10年数据(2016-2025)，确保所有股票都有完整数据
     print("\n[1.1] 获取股票日度数据...")
     all_stock_data = data_module.fetch_stock_data(
         stock_list=stock_list,
-        start_date='20180101',
+        start_date='20160101',
         end_date='20251231'
     )
     
@@ -237,28 +234,80 @@ def main():
     print("    - 金融板块协同 (平安-招行)")
     print("    - 跨板块领先滞后关系")
     
-    transformer_module = TransformerPredictor(
-        seq_length=60,        # 60个交易日 (约3个月)
-        pred_length=5,        # 预测未来5个交易日
-        d_model=2048,         # 大模型维度，充分利用A800 80G显存
-        n_heads=16,           # 注意力头数 (head_dim=128)
-        n_layers=10,          # 10层Transformer
-        d_ff=8192,            # FFN隐层维度 = 4×d_model (标准比例)
-        dropout=0.25,         # 略增dropout防过拟合
-        epochs=500,           # 训练轮数
-        learning_rate=0.0001, # 学习率
-        batch_size=256,       # 大批量充分利用显存
-        use_itransformer=True # 启用iTransformer多股票关联模式
-    )
+    # 优先加载 Optuna 训练好的缓存预测结果（确保和 Optuna 搜索一致）
+    import pickle
+    CACHE_PATH = os.path.join(OUTPUT_DIR, 'cached_model_results.pkl')
     
-    # 训练模型
-    print("\n[3.1] 训练Transformer模型...")
-    model_results = transformer_module.train_and_predict(
-        feature_data=feature_data,
-        feature_cols=feature_cols,
-        target_col='future_return_5d',  
-        train_ratio=0.8  
-    )
+    if os.path.exists(CACHE_PATH):
+        print(f"\n  [缓存模式] 发现 Optuna 训练的预测缓存: {CACHE_PATH}")
+        print(f"  直接加载预测结果，跳过模型训练（确保和 Optuna 结果一致）")
+        with open(CACHE_PATH, 'rb') as f:
+            cached = pickle.load(f)
+        
+        # 构造与 train_and_predict 相同格式的 model_results
+        model_results = {
+            'predictions': cached['predictions'],
+            'val_predictions': cached.get('val_predictions'),
+            'mse': cached.get('mse', 0),
+            'mae': cached.get('mae', 0),
+            'direction_accuracy': cached.get('direction_accuracy', 0),
+            'val_mse': cached.get('val_mse', 0),
+            'val_direction_accuracy': cached.get('val_direction_accuracy', 0),
+            'stock_codes': cached.get('stock_codes', []),
+            'model': None,          # 缓存模式无模型对象
+            'stock_attention': None,  # 缓存模式无attention权重
+        }
+        print(f"  加载完成: 测试集 {len(model_results['predictions'])} 条预测")
+    else:
+        print(f"\n  [训练模式] 未发现预测缓存，需要训练模型")
+        print(f"  提示: 运行 optuna_search.py --skip-phase1 --phase2-trials 0 可生成缓存")
+        
+        # 默认模型参数
+        model_params = {
+            'seq_length': 60, 'pred_length': 5, 'd_model': 1536, 'n_heads': 32,
+            'n_layers': 14, 'd_ff': 3072, 'dropout': 0.20656, 'epochs': 440,
+            'learning_rate': 2.450e-04, 'batch_size': 64
+        }
+        
+        # 尝试从 Optuna 结果加载最优模型参数
+        import json
+        PARAMS_PATH = os.path.join(OUTPUT_DIR, 'optuna_best_params.json')
+        if os.path.exists(PARAMS_PATH):
+            try:
+                with open(PARAMS_PATH, 'r', encoding='utf-8') as f:
+                    best_params = json.load(f)
+                    if 'model' in best_params and best_params['model']:
+                        print(f"  [参数加载] 发现 Optuna 最优参数文件，加载模型参数...")
+                        # 更新存在的参数
+                        for k in model_params.keys():
+                            if k in best_params['model']:
+                                model_params[k] = best_params['model'][k]
+            except Exception as e:
+                print(f"  [警告] 加载最优模型参数失败: {e}")
+        
+        transformer_module = TransformerPredictor(
+            seq_length=model_params['seq_length'],
+            pred_length=model_params['pred_length'],
+            d_model=model_params['d_model'],
+            n_heads=model_params['n_heads'],
+            n_layers=model_params['n_layers'],
+            d_ff=model_params['d_ff'],
+            dropout=model_params['dropout'],
+            epochs=model_params['epochs'],
+            learning_rate=model_params['learning_rate'],
+            batch_size=model_params['batch_size'],
+            use_itransformer=True # 启用iTransformer多股票关联模式
+        )
+        
+        # 训练模型
+        print("\n[3.1] 训练Transformer模型...")
+        model_results = transformer_module.train_and_predict(
+            feature_data=feature_data,
+            feature_cols=feature_cols,
+            target_col='future_return_5d',  
+            train_ratio=0.70,   # 训练集70%
+            val_ratio=0.15       # 验证集15%（用于早停），测试集15%
+        )
     
     # 模型评估
     print("\n[3.2] 模型评估指标:")
@@ -273,14 +322,39 @@ def main():
     print("[第四部分] 量化交易策略设计")
     print("=" * 50)
     
+    # 默认策略参数
+    strategy_params = {
+        'max_position_ratio': 0.34502,
+        'stop_loss_ratio': 0.05876,
+        'take_profit_ratio': 0.08208,
+        'buy_threshold': 0.02387,
+        'sell_threshold': -0.00432
+    }
+    
+    # 尝试从 Optuna 结果加载最优策略参数
+    import json
+    PARAMS_PATH = os.path.join(OUTPUT_DIR, 'optuna_best_params.json')
+    if os.path.exists(PARAMS_PATH):
+        try:
+            with open(PARAMS_PATH, 'r', encoding='utf-8') as f:
+                best_params = json.load(f)
+                if 'strategy' in best_params and best_params['strategy']:
+                    print(f"  [参数加载] 发现 Optuna 最优参数文件，加载策略参数...")
+                    # 更新存在的参数
+                    for k in strategy_params.keys():
+                        if k in best_params['strategy']:
+                            strategy_params[k] = best_params['strategy'][k]
+        except Exception as e:
+            print(f"  [警告] 加载最优策略参数失败: {e}")
+    
     strategy_module = TradingStrategy(
         initial_capital=1000000,    # 初始资金100万
-        max_position_ratio=0.20,    # 单只股票最大仓位20%（更分散以降低风险）
-        stop_loss_ratio=0.04,       # 止损4%（更严格快速止损）
-        take_profit_ratio=0.06,     # 止盈6%（早点获利了结）
+        max_position_ratio=strategy_params['max_position_ratio'],
+        stop_loss_ratio=strategy_params['stop_loss_ratio'],
+        take_profit_ratio=strategy_params['take_profit_ratio'],
         use_kelly=True,             # 使用凯利公式
-        buy_threshold=0.008,        # 买入阈值0.8%（更多交易机会）
-        sell_threshold=-0.005       # 卖出阈值-0.5%
+        buy_threshold=strategy_params['buy_threshold'],
+        sell_threshold=strategy_params['sell_threshold']
     )
     
     # 生成交易信号
@@ -333,23 +407,23 @@ def main():
     
     # 汇总对比
     comparison_df = pd.DataFrame({
-        '策略': ['本文Transformer策略', '传统均线策略', '买入持有策略'],
-        '年化收益率(%)': [
+        'Strategy': ['iTransformer (Ours)', 'MA Crossover', 'Buy & Hold'],
+        'Annual Return(%)': [
             metrics['annual_return'] * 100,
             ma_metrics['annual_return'] * 100,
             bh_metrics['annual_return'] * 100
         ],
-        '最大回撤(%)': [
+        'Max Drawdown(%)': [
             metrics['max_drawdown'] * 100,
             ma_metrics['max_drawdown'] * 100,
             bh_metrics['max_drawdown'] * 100
         ],
-        '夏普比率': [
+        'Sharpe Ratio': [
             metrics['sharpe_ratio'],
             ma_metrics['sharpe_ratio'],
             bh_metrics['sharpe_ratio']
         ],
-        '胜率(%)': [
+        'Win Rate(%)': [
             metrics['win_rate'] * 100,
             ma_metrics['win_rate'] * 100,
             bh_metrics['win_rate'] * 100
@@ -373,9 +447,9 @@ def main():
     print("\n[6.1] 绘制累计收益曲线...")
     viz_module.plot_equity_curves(
         results_dict={
-            '本文Transformer策略': backtest_results,
-            '传统均线策略': ma_results,
-            '买入持有策略': bh_results
+            'iTransformer (Ours)': backtest_results,
+            'MA Crossover': ma_results,
+            'Buy & Hold': bh_results
         }
     )
     
@@ -439,25 +513,12 @@ if __name__ == '__main__':
     if args.optimize:
         # 先运行数据获取和特征工程，然后进行超参数优化
         print("=" * 70)
-        print("运行超参数优化模式")
+        print("运行超参数优化模式（100只股票，与optuna_search一致）")
         print("=" * 70)
         
-        # 数据获取
-        stock_list = [
-            '600519.SH', '000858.SZ', '601318.SH', '600036.SH', '000333.SZ',
-        ]
-        data_module = DataAcquisition()
-        all_stock_data = data_module.fetch_stock_data(
-            stock_list=stock_list,
-            start_date='20200101',
-            end_date='20251231'
-        )
-        cleaned_data = data_module.clean_data(all_stock_data)
-        
-        # 特征工程
-        fe_module = FeatureEngineering()
-        feature_data = fe_module.compute_all_features(cleaned_data)
-        feature_cols = fe_module.get_feature_columns()
+        # 使用与main()和optuna_search.py一致的100只股票
+        from optuna_search import ALL_STOCKS, prepare_data
+        feature_data, feature_cols = prepare_data(ALL_STOCKS[:100])
         
         # 超参数优化
         best_params = run_hyperparameter_optimization(feature_data, feature_cols, args.trials)

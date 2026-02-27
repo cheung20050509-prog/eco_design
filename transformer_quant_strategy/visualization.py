@@ -29,22 +29,10 @@ from typing import Dict, List, Optional
 import warnings
 warnings.filterwarnings('ignore')
 
-# 中文字体设置
-CHINESE_FONT_PATH = '/usr/share/fonts/truetype/SimHei.ttf'
-
-# 显式添加字体到 matplotlib
-if os.path.exists(CHINESE_FONT_PATH):
-    fm.fontManager.addfont(CHINESE_FONT_PATH)
-    
-# 全局设置中文字体
+# Font settings (English only for paper figures)
 plt.rcParams['font.family'] = 'sans-serif'
-plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans', 'Arial']
+plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial']
 plt.rcParams['axes.unicode_minus'] = False
-
-# 创建 FontProperties 对象用于明确指定
-CHINESE_FONT = fm.FontProperties(fname=CHINESE_FONT_PATH, size=12)
-CHINESE_FONT_TITLE = fm.FontProperties(fname=CHINESE_FONT_PATH, size=14)
-CHINESE_FONT_LEGEND = fm.FontProperties(fname=CHINESE_FONT_PATH, size=10)
 
 plt.style.use('seaborn-v0_8-whitegrid')
 
@@ -87,10 +75,10 @@ class Visualization:
             ax.plot(equity_curve['date'], cumulative_return, 
                    label=strategy_name, linewidth=2, color=colors[i % len(colors)])
         
-        ax.set_xlabel('日期', fontsize=12, fontproperties=CHINESE_FONT)
-        ax.set_ylabel('累计收益率 (%)', fontsize=12, fontproperties=CHINESE_FONT)
-        ax.set_title('策略累计收益曲线对比', fontsize=14, fontweight='bold', fontproperties=CHINESE_FONT_TITLE)
-        ax.legend(loc='upper left', prop=CHINESE_FONT_LEGEND)
+        ax.set_xlabel('Date', fontsize=12)
+        ax.set_ylabel('Cumulative Return (%)', fontsize=12)
+        ax.set_title('Cumulative Return Comparison', fontsize=14, fontweight='bold')
+        ax.legend(loc='upper left')
         ax.grid(True, alpha=0.3)
         
         # 格式化日期
@@ -132,12 +120,12 @@ class Visualization:
         # 添加对角线
         min_val = min(predictions_df['actual'].min(), predictions_df['predicted'].min())
         max_val = max(predictions_df['actual'].max(), predictions_df['predicted'].max())
-        ax1.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=2, label='理想预测线')
+        ax1.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=2, label='Ideal Prediction')
         
-        ax1.set_xlabel('实际收益率', fontsize=12, fontproperties=CHINESE_FONT)
-        ax1.set_ylabel('预测收益率', fontsize=12, fontproperties=CHINESE_FONT)
-        ax1.set_title('预测值与实际值对比（散点图）', fontsize=14, fontweight='bold', fontproperties=CHINESE_FONT_TITLE)
-        ax1.legend(prop=CHINESE_FONT_LEGEND)
+        ax1.set_xlabel('Actual Return', fontsize=12)
+        ax1.set_ylabel('Predicted Return', fontsize=12)
+        ax1.set_title('Predicted vs Actual Returns (Scatter)', fontsize=14, fontweight='bold')
+        ax1.legend()
         ax1.grid(True, alpha=0.3)
         
         # 添加评估指标文本
@@ -145,10 +133,9 @@ class Visualization:
         mae = model_results.get('mae', 0)
         direction_acc = model_results.get('direction_accuracy', 0)
         
-        textstr = f'MSE: {mse:.6f}\nMAE: {mae:.6f}\n方向准确率: {direction_acc:.2%}'
+        textstr = f'MSE: {mse:.6f}\nMAE: {mae:.6f}\nDir. Accuracy: {direction_acc:.2%}'
         ax1.text(0.02, 0.98, textstr, transform=ax1.transAxes, fontsize=10,
-                verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5),
-                fontproperties=CHINESE_FONT)
+                verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
         
         # 图2: 时序对比图（取部分数据）
         ax2 = axes[1]
@@ -158,14 +145,14 @@ class Visualization:
         sample_data = predictions_df[predictions_df['stock_code'] == sample_stock].head(100)
         
         x = range(len(sample_data))
-        ax2.plot(x, sample_data['actual'], label='实际收益率', linewidth=1.5, color='#2E86AB')
-        ax2.plot(x, sample_data['predicted'], label='预测收益率', linewidth=1.5, 
+        ax2.plot(x, sample_data['actual'], label='Actual Return', linewidth=1.5, color='#2E86AB')
+        ax2.plot(x, sample_data['predicted'], label='Predicted Return', linewidth=1.5, 
                 color='#F18F01', linestyle='--')
         
-        ax2.set_xlabel('时间序列', fontsize=12, fontproperties=CHINESE_FONT)
-        ax2.set_ylabel('收益率', fontsize=12, fontproperties=CHINESE_FONT)
-        ax2.set_title(f'预测值与实际值时序对比（{sample_stock}）', fontsize=14, fontweight='bold', fontproperties=CHINESE_FONT_TITLE)
-        ax2.legend(prop=CHINESE_FONT_LEGEND)
+        ax2.set_xlabel('Time Step', fontsize=12)
+        ax2.set_ylabel('Return', fontsize=12)
+        ax2.set_title(f'Predicted vs Actual Returns ({sample_stock})', fontsize=14, fontweight='bold')
+        ax2.legend()
         ax2.grid(True, alpha=0.3)
         ax2.axhline(y=0, color='black', linestyle='-', linewidth=0.5, alpha=0.5)
         
@@ -209,22 +196,22 @@ class Visualization:
         # 图1: 价格走势和交易信号
         ax1 = axes[0]
         ax1.plot(merged['date'], merged['close'], linewidth=1.5, 
-                color='#2E86AB', label='收盘价')
+                color='#2E86AB', label='Close Price')
         
-        # 标记买入点
+        # Mark buy points
         buy_points = merged[merged['signal'] == 1]
         ax1.scatter(buy_points['date'], buy_points['close'], 
-                   marker='^', s=100, c='green', label='买入信号', zorder=5)
+                   marker='^', s=100, c='green', label='Buy Signal', zorder=5)
         
-        # 标记卖出点
+        # Mark sell points
         sell_points = merged[merged['signal'] == -1]
         ax1.scatter(sell_points['date'], sell_points['close'], 
-                   marker='v', s=100, c='red', label='卖出信号', zorder=5)
+                   marker='v', s=100, c='red', label='Sell Signal', zorder=5)
         
-        ax1.set_xlabel('日期', fontsize=12, fontproperties=CHINESE_FONT)
-        ax1.set_ylabel('价格 (元)', fontsize=12, fontproperties=CHINESE_FONT)
-        ax1.set_title(f'{stock_code} 交易信号图', fontsize=14, fontweight='bold', fontproperties=CHINESE_FONT_TITLE)
-        ax1.legend(loc='upper left', prop=CHINESE_FONT_LEGEND)
+        ax1.set_xlabel('Date', fontsize=12)
+        ax1.set_ylabel('Price (CNY)', fontsize=12)
+        ax1.set_title(f'{stock_code} Trading Signals', fontsize=14, fontweight='bold')
+        ax1.legend(loc='upper left')
         ax1.grid(True, alpha=0.3)
         
         ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
@@ -236,9 +223,9 @@ class Visualization:
         ax2.bar(merged['date'], merged['predicted'], color=colors, alpha=0.7, width=1)
         ax2.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
         
-        ax2.set_xlabel('日期', fontsize=12, fontproperties=CHINESE_FONT)
-        ax2.set_ylabel('预测收益率', fontsize=12, fontproperties=CHINESE_FONT)
-        ax2.set_title('模型预测收益率', fontsize=12, fontproperties=CHINESE_FONT)
+        ax2.set_xlabel('Date', fontsize=12)
+        ax2.set_ylabel('Predicted Return', fontsize=12)
+        ax2.set_title('Model Predicted Return', fontsize=12)
         ax2.grid(True, alpha=0.3)
         
         ax2.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
@@ -279,9 +266,9 @@ class Visualization:
         ax1.plot(equity_curve['date'], equity / 10000, linewidth=1.5, color='#2E86AB')
         ax1.fill_between(equity_curve['date'], equity / 10000, alpha=0.3, color='#2E86AB')
         
-        ax1.set_xlabel('日期', fontsize=12, fontproperties=CHINESE_FONT)
-        ax1.set_ylabel('权益 (万元)', fontsize=12, fontproperties=CHINESE_FONT)
-        ax1.set_title('策略权益曲线', fontsize=14, fontweight='bold', fontproperties=CHINESE_FONT_TITLE)
+        ax1.set_xlabel('Date', fontsize=12)
+        ax1.set_ylabel('Equity (10k CNY)', fontsize=12)
+        ax1.set_title('Strategy Equity Curve', fontsize=14, fontweight='bold')
         ax1.grid(True, alpha=0.3)
         
         # 图2: 回撤曲线
@@ -294,14 +281,14 @@ class Visualization:
         max_dd_idx = np.argmax(drawdown)
         ax2.axhline(y=-drawdown[max_dd_idx], color='black', linestyle='--', 
                    linewidth=1, alpha=0.7)
-        ax2.annotate(f'最大回撤: {drawdown[max_dd_idx]:.1f}%', 
+        ax2.annotate(f'Max Drawdown: {drawdown[max_dd_idx]:.1f}%', 
                     xy=(equity_curve['date'].iloc[max_dd_idx], -drawdown[max_dd_idx]),
                     xytext=(10, -10), textcoords='offset points',
-                    fontsize=10, fontweight='bold', fontproperties=CHINESE_FONT)
+                    fontsize=10, fontweight='bold')
         
-        ax2.set_xlabel('日期', fontsize=12, fontproperties=CHINESE_FONT)
-        ax2.set_ylabel('回撤 (%)', fontsize=12, fontproperties=CHINESE_FONT)
-        ax2.set_title('策略回撤曲线', fontsize=14, fontweight='bold', fontproperties=CHINESE_FONT_TITLE)
+        ax2.set_xlabel('Date', fontsize=12)
+        ax2.set_ylabel('Drawdown (%)', fontsize=12)
+        ax2.set_title('Strategy Drawdown', fontsize=14, fontweight='bold')
         ax2.grid(True, alpha=0.3)
         
         for ax in axes:
@@ -336,9 +323,9 @@ class Visualization:
         ax1.hist(predictions_df['predicted'], bins=50, color='#2E86AB', 
                 alpha=0.7, edgecolor='white')
         ax1.axvline(x=0, color='red', linestyle='--', linewidth=2)
-        ax1.set_xlabel('预测收益率', fontsize=12, fontproperties=CHINESE_FONT)
-        ax1.set_ylabel('频数', fontsize=12, fontproperties=CHINESE_FONT)
-        ax1.set_title('预测收益率分布', fontsize=14, fontweight='bold', fontproperties=CHINESE_FONT_TITLE)
+        ax1.set_xlabel('Predicted Return', fontsize=12)
+        ax1.set_ylabel('Frequency', fontsize=12)
+        ax1.set_title('Distribution of Predicted Returns', fontsize=14, fontweight='bold')
         ax1.grid(True, alpha=0.3)
         
         # 图2: 预测vs实际的误差分布
@@ -346,19 +333,18 @@ class Visualization:
         errors = predictions_df['predicted'] - predictions_df['actual']
         ax2.hist(errors, bins=50, color='#F18F01', alpha=0.7, edgecolor='white')
         ax2.axvline(x=0, color='red', linestyle='--', linewidth=2)
-        ax2.set_xlabel('预测误差', fontsize=12, fontproperties=CHINESE_FONT)
-        ax2.set_ylabel('频数', fontsize=12, fontproperties=CHINESE_FONT)
-        ax2.set_title('预测误差分布', fontsize=14, fontweight='bold', fontproperties=CHINESE_FONT_TITLE)
+        ax2.set_xlabel('Prediction Error', fontsize=12)
+        ax2.set_ylabel('Frequency', fontsize=12)
+        ax2.set_title('Distribution of Prediction Errors', fontsize=14, fontweight='bold')
         ax2.grid(True, alpha=0.3)
         
         # 添加统计信息
         mean_error = errors.mean()
         std_error = errors.std()
-        textstr = f'均值: {mean_error:.6f}\n标准差: {std_error:.6f}'
+        textstr = f'Mean: {mean_error:.6f}\nStd: {std_error:.6f}'
         ax2.text(0.98, 0.98, textstr, transform=ax2.transAxes, fontsize=10,
                 verticalalignment='top', horizontalalignment='right',
-                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5),
-                fontproperties=CHINESE_FONT)
+                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
         
         plt.tight_layout()
         plt.savefig(f'{self.output_dir}/{filename}', dpi=150, bbox_inches='tight')
@@ -401,7 +387,7 @@ class Visualization:
             table[(i, 0)].set_facecolor('#E8E8E8')
             table[(i, 0)].set_text_props(fontweight='bold')
         
-        plt.title('策略绩效对比表', fontsize=14, fontweight='bold', pad=20, fontproperties=CHINESE_FONT_TITLE)
+        plt.title('Strategy Performance Comparison', fontsize=14, fontweight='bold', pad=20)
         plt.tight_layout()
         plt.savefig(f'{self.output_dir}/{filename}', dpi=150, bbox_inches='tight')
         plt.close()
@@ -437,9 +423,9 @@ if __name__ == '__main__':
     viz = Visualization(output_dir='output')
     
     viz.plot_equity_curves({
-        '本文Transformer策略': results1,
-        '传统均线策略': results2,
-        '买入持有策略': results3
+        'iTransformer Strategy': results1,
+        'MA Crossover': results2,
+        'Buy & Hold': results3
     })
     
     viz.plot_drawdown(results1)

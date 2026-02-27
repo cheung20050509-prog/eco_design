@@ -292,48 +292,39 @@ class BacktestEngine:
     
     def buy_and_hold(self, price_data: pd.DataFrame) -> Dict:
         """
-        买入持有策略
+        买入持有策略（向量化实现，高性能）
         
         在期初等权重买入所有股票，持有至期末
         """
-        # 获取所有股票
         stocks = price_data['stock_code'].unique()
         n_stocks = len(stocks)
         
         if n_stocks == 0:
             return {'equity_curve': pd.DataFrame(), 'daily_returns': np.array([])}
         
-        # 每只股票分配资金
         capital_per_stock = self.initial_capital / n_stocks
         
-        # 计算每只股票的收益
-        equity_data = []
+        # 向量化：pivot为日期×股票的收盘价矩阵
+        pivot = price_data.pivot_table(index='date', columns='stock_code', values='close')
+        pivot = pivot.sort_index()
         
-        dates = sorted(price_data['date'].unique())
+        # 每只股票在第一天买入的股数（取整到100股）
+        initial_prices = pivot.iloc[0].dropna()
+        pivot = pivot[initial_prices.index]  # 只保留首日有数据的股票
+        shares = (capital_per_stock / initial_prices / 100).astype(int) * 100
         
-        for date in dates:
-            day_data = price_data[price_data['date'] == date]
-            
-            total_value = 0
-            for stock in stocks:
-                stock_data = day_data[day_data['stock_code'] == stock]
-                if len(stock_data) > 0:
-                    # 获取初始价格
-                    first_day = price_data[price_data['stock_code'] == stock].iloc[0]
-                    initial_price = first_day['close']
-                    
-                    current_price = stock_data['close'].iloc[0]
-                    shares = int(capital_per_stock / initial_price / 100) * 100
-                    total_value += shares * current_price
-            
-            equity_data.append({
-                'date': date,
-                'total_equity': total_value if total_value > 0 else self.initial_capital
-            })
+        # 每日总市值 = 各股票 shares × 当日收盘价（NaN用前值填充）
+        pivot = pivot.ffill()
+        daily_value = (pivot * shares).sum(axis=1)
+        # 未买到的剩余现金
+        cash_remainder = self.initial_capital - (shares * initial_prices).sum()
+        daily_value += cash_remainder
         
-        equity_df = pd.DataFrame(equity_data)
+        equity_df = pd.DataFrame({
+            'date': daily_value.index,
+            'total_equity': daily_value.values
+        }).reset_index(drop=True)
         
-        # 计算日收益率
         equity_df['daily_return'] = equity_df['total_equity'].pct_change().fillna(0)
         
         return {

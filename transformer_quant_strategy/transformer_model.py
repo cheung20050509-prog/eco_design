@@ -20,6 +20,7 @@ iTransformer模型模块 (2024 ICLR)
 - 输出: 各股票未来M天的收益率预测
 """
 
+import os
 import numpy as np
 import pandas as pd
 import torch
@@ -28,6 +29,24 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error
+import random
+import hashlib
+import json
+
+
+def set_seed(seed: int = 42):
+    """固定所有随机种子，确保可复现性"""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    # DataLoader worker seed fix
+    os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:8'
+    print(f"  [随机种子] 已固定 seed={seed}")
 from typing import Dict, List, Tuple, Optional
 import warnings
 warnings.filterwarnings('ignore')
@@ -592,7 +611,8 @@ class TransformerPredictor:
                          feature_data: pd.DataFrame,
                          feature_cols: List[str],
                          target_col: str = 'future_return_5d',
-                         train_ratio: float = 0.8) -> Dict:
+                         train_ratio: float = 0.70,
+                         val_ratio: float = 0.15) -> Dict:
         """
         训练模型并进行预测
         
@@ -600,12 +620,17 @@ class TransformerPredictor:
             feature_data: 特征数据DataFrame
             feature_cols: 特征列名列表
             target_col: 目标列名
-            train_ratio: 训练集比例
+            train_ratio: 训练集比例（默认70%）
+            val_ratio: 验证集比例（默认15%，用于早停）
+            (测试集 = 1 - train_ratio - val_ratio = 15%)
         
         返回:
             包含预测结果和评估指标的字典
         """
         self.feature_cols = feature_cols
+        
+        # 固定随机种子
+        set_seed(42)
         
         # 按股票分组训练
         all_predictions = []
@@ -639,7 +664,7 @@ class TransformerPredictor:
             # 构建 (batch, n_stocks, seq_len, features) 格式数据
             print(f"  [iTransformer模式] 构建多股票同步数据...")
             
-            # 1. 首先为每只股票准备标准化后的序列数据
+            # 1. 首先为每只股票准备原始序列数据（标准化推迟到划分后）
             stock_data_dict = {}
             available_dates = None
             
@@ -655,19 +680,14 @@ class TransformerPredictor:
                 y_raw = stock_df[target_col].values
                 dates = stock_df['date'].values
                 
-                # 标准化（每只股票独立标准化）
-                scaler = StandardScaler()
-                X_scaled = scaler.fit_transform(X_raw)
-                
-                # 构建序列
-                X_seq, y_seq = self._prepare_sequences(X_scaled, y_raw)
+                # 先构建序列（用原始数据），标准化推迟到train/test划分后
+                X_seq, y_seq = self._prepare_sequences(X_raw, y_raw)
                 date_seq = dates[self.seq_length:]
                 
                 stock_data_dict[stock_code] = {
-                    'X': X_seq, 
+                    'X': X_seq,  # 未标准化的原始序列
                     'y': y_seq, 
                     'dates': date_seq,
-                    'scaler': scaler
                 }
                 
                 # 取所有股票日期的交集
@@ -697,16 +717,41 @@ class TransformerPredictor:
                     X_multi[d_idx, s_idx] = stock_info['X'][date_idx]
                     y_multi[d_idx, s_idx] = stock_info['y'][date_idx]
             
-            # 4. 划分训练集和测试集
-            split_idx = int(n_dates * train_ratio)
+            # 4. 划分训练集、验证集和测试集 (70/15/15)
+            split_train = int(n_dates * train_ratio)
+            split_val = int(n_dates * (train_ratio + val_ratio))
             
-            X_train = X_multi[:split_idx]
-            y_train = y_multi[:split_idx]
-            X_test = X_multi[split_idx:]
-            y_test = y_multi[split_idx:]
+            # 5. 防数据泄露：每只股票独立，仅在训练集上fit StandardScaler
+            print(f"    [防泄露] StandardScaler 仅在训练集({split_train}天)上fit...")
+            print(f"    数据划分: 训练={split_train}天, 验证={split_val-split_train}天, 测试={n_dates-split_val}天")
+            stock_scalers = {}
+            for s_idx, stock_code in enumerate(active_stocks):
+                scaler = StandardScaler()
+                # 将训练期的所有序列展平为(n_train_dates * seq_len, n_features)
+                train_flat = X_multi[:split_train, s_idx].reshape(-1, n_features)
+                scaler.fit(train_flat)
+                stock_scalers[stock_code] = scaler
+                # 对训练集、验证集和测试集分别 transform
+                for d_idx in range(n_dates):
+                    X_multi[d_idx, s_idx] = scaler.transform(X_multi[d_idx, s_idx])
             
-            train_dates = available_dates[:split_idx]
-            test_dates = available_dates[split_idx:]
+            X_train = X_multi[:split_train]
+            y_train = y_multi[:split_train]
+            X_val = X_multi[split_train:split_val]
+            y_val = y_multi[split_train:split_val]
+            X_test = X_multi[split_val:]
+            y_test = y_multi[split_val:]
+            
+            train_dates = available_dates[:split_train]
+            val_dates = available_dates[split_train:split_val]
+            test_dates = available_dates[split_val:]
+            
+            date_val_all = []
+            stock_val_all = []
+            for date in val_dates:
+                for stock in active_stocks:
+                    date_val_all.append(date)
+                    stock_val_all.append(stock)
             
             date_test_all = []
             stock_test_all = []
@@ -716,14 +761,18 @@ class TransformerPredictor:
                     stock_test_all.append(stock)
             
             # 展平y用于后续评估
+            y_val_flat = y_val.flatten()
             y_test_flat = y_test.flatten()
             
             print(f"  多股票训练集: {X_train.shape} (日期数, 股票数, 序列长, 特征数)")
+            print(f"  多股票验证集: {X_val.shape}")
             print(f"  多股票测试集: {X_test.shape}")
             
             # 转换为PyTorch张量
             X_train_tensor = torch.FloatTensor(X_train)
-            y_train_tensor = torch.FloatTensor(y_train)  # (n_dates, n_stocks)
+            y_train_tensor = torch.FloatTensor(y_train).unsqueeze(-1)  # (n_dates, n_stocks, 1) 匹配模型输出
+            X_val_tensor = torch.FloatTensor(X_val).to(device)
+            y_val_tensor = torch.FloatTensor(y_val).unsqueeze(-1).to(device)  # (n_dates, n_stocks, 1)
             X_test_tensor = torch.FloatTensor(X_test).to(device)
             
             large_batch_size = min(self.batch_size, len(X_train) // 2)
@@ -731,7 +780,9 @@ class TransformerPredictor:
         else:
             # 传统模式：混合所有股票
             X_train_all, y_train_all = [], []
+            X_val_all, y_val_all = [], []
             X_test_all, y_test_all = [], []
+            date_val_all, stock_val_all = [], []
             date_test_all, stock_test_all = [], []
             
             for stock_code in stock_codes:
@@ -746,56 +797,80 @@ class TransformerPredictor:
                 y_raw = stock_df[target_col].values
                 dates = stock_df['date'].values
                 
-                X_scaled = self.scaler.fit_transform(X_raw)
-                X_seq, y_seq = self._prepare_sequences(X_scaled, y_raw)
+                # 防数据泄露：先划分再标准化
+                X_seq, y_seq = self._prepare_sequences(X_raw, y_raw)
                 date_seq = dates[self.seq_length:]
                 
                 if len(X_seq) < 50:
                     continue
                 
-                split_idx = int(len(X_seq) * train_ratio)
+                split_train = int(len(X_seq) * train_ratio)
+                split_val = int(len(X_seq) * (train_ratio + val_ratio))
                 
-                X_train_all.append(X_seq[:split_idx])
-                y_train_all.append(y_seq[:split_idx])
+                # Scaler 仅在训练集上 fit
+                scaler = StandardScaler()
+                train_flat = X_seq[:split_train].reshape(-1, X_seq.shape[2])
+                scaler.fit(train_flat)
+                # 分别 transform
+                X_train_scaled = np.array([scaler.transform(x) for x in X_seq[:split_train]])
+                X_val_scaled = np.array([scaler.transform(x) for x in X_seq[split_train:split_val]])
+                X_test_scaled = np.array([scaler.transform(x) for x in X_seq[split_val:]])
                 
-                X_test_all.append(X_seq[split_idx:])
-                y_test_all.append(y_seq[split_idx:])
-                date_test_all.extend(date_seq[split_idx:])
-                stock_test_all.extend([stock_code] * len(y_seq[split_idx:]))
+                X_train_all.append(X_train_scaled)
+                y_train_all.append(y_seq[:split_train])
+                
+                X_val_all.append(X_val_scaled)
+                y_val_all.append(y_seq[split_train:split_val])
+                date_val_all.extend(date_seq[split_train:split_val])
+                stock_val_all.extend([stock_code] * len(y_seq[split_train:split_val]))
+                
+                X_test_all.append(X_test_scaled)
+                y_test_all.append(y_seq[split_val:])
+                date_test_all.extend(date_seq[split_val:])
+                stock_test_all.extend([stock_code] * len(y_seq[split_val:]))
             
             X_train = np.vstack(X_train_all)
             y_train = np.concatenate(y_train_all)
+            X_val = np.vstack(X_val_all)
+            y_val = np.concatenate(y_val_all)
             X_test = np.vstack(X_test_all)
             y_test = np.concatenate(y_test_all)
+            y_val_flat = y_val
             y_test_flat = y_test
             
             X_train_tensor = torch.FloatTensor(X_train)
             y_train_tensor = torch.FloatTensor(y_train).unsqueeze(-1)
+            X_val_tensor = torch.FloatTensor(X_val).to(device)
+            y_val_tensor = torch.FloatTensor(y_val).unsqueeze(-1).to(device)
             X_test_tensor = torch.FloatTensor(X_test).to(device)
             
             large_batch_size = min(self.batch_size, len(X_train) // 4)
         
         print(f"  全局训练集大小: {len(X_train)}")
+        print(f"  全局验证集大小: {len(X_val)}")
         print(f"  全局测试集大小: {len(X_test)}")
         
-        # 转换为PyTorch张量 (先不放到device，让DataLoader处理)
-        X_train_tensor = torch.FloatTensor(X_train)
-        y_train_tensor = torch.FloatTensor(y_train).unsqueeze(-1)
-        X_test_tensor = torch.FloatTensor(X_test).to(device)
-        
-        # 使用配置的batch_size
-        large_batch_size = min(self.batch_size, len(X_train) // 4)
+        # 注意: X_train_tensor, y_train_tensor, X_val_tensor, y_val_tensor, X_test_tensor
+        # 已在上面的 if/else 分支中根据模式正确创建（含shape处理）
         print(f"  使用大批量训练: Batch Size = {large_batch_size}")
         
         # 创建数据加载器
         train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
-        # 增加 num_workers 和 pin_memory 以加速数据加载
+        # num_workers=0 确保数据加载确定性（可复现）
+        def seed_worker(worker_id):
+            worker_seed = torch.initial_seed() % 2**32
+            np.random.seed(worker_seed)
+            random.seed(worker_seed)
+        g = torch.Generator()
+        g.manual_seed(42)
         train_loader = DataLoader(
             train_dataset, 
             batch_size=large_batch_size, 
             shuffle=True,
-            num_workers=4,
-            pin_memory=True
+            num_workers=0,
+            pin_memory=True,
+            worker_init_fn=seed_worker,
+            generator=g
         )
         
         # 初始化模型 - 根据配置选择iTransformer或传统Transformer
@@ -840,8 +915,10 @@ class TransformerPredictor:
         trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         print(f"  模型参数量: {total_params:,} (可训练: {trainable_params:,})")
         
-        # 损失函数和优化器 - 使用Huber损失，对异常值更鲁棒
-        return_criterion = nn.HuberLoss(delta=0.01)  # 收益预测损失
+        # 损失函数和优化器
+        # 注意: HuberLoss(delta=0.01)会导致收益回归梯度被方向损失淹没(delta太小)
+        # 改用MSELoss让回归损失和方向损失在同一量级
+        return_criterion = nn.MSELoss()  # 收益预测损失
         direction_criterion = nn.MSELoss()  # 方向预测损失
         optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.learning_rate, weight_decay=0.02)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=20, T_mult=2)
@@ -849,13 +926,18 @@ class TransformerPredictor:
         # 训练模型
         print(f"\n  开始全局模型训练...")
         self.model.train()
-        best_loss = float('inf')
+        best_val_loss = float('inf')
+        best_model_state = None
+        best_epoch = 0
         patience = 50  # 增加耐心值，让多股票模型训练更充分
         patience_counter = 0
         accumulation_steps = max(1, 512 // large_batch_size)  # 梯度累积，等效batch_size=512
         print(f"  梯度累积步数: {accumulation_steps} (等效Batch Size = {large_batch_size * accumulation_steps})")
+        print(f"  早停: 基于验证集loss (patience={patience})")
         
         for epoch in range(self.epochs):
+            # === 训练阶段 ===
+            self.model.train()
             epoch_loss = 0
             optimizer.zero_grad()
             for step, (batch_X, batch_y) in enumerate(train_loader):
@@ -873,8 +955,8 @@ class TransformerPredictor:
                 return_loss = return_criterion(return_pred, batch_y)
                 direction_loss = direction_criterion(direction_pred, direction_label)
                 
-                # 总损失 = 收益损失 + 0.3 * 方向损失
-                loss = (return_loss + 0.3 * direction_loss) / accumulation_steps
+                # 总损失 = 收益损失 + 0.1 * 方向损失
+                loss = (return_loss + 0.1 * direction_loss) / accumulation_steps
                 
                 loss.backward()
                 epoch_loss += loss.item() * accumulation_steps
@@ -885,27 +967,95 @@ class TransformerPredictor:
                     optimizer.zero_grad()
             
             scheduler.step()
-            avg_loss = epoch_loss / len(train_loader)
+            avg_train_loss = epoch_loss / len(train_loader)
             
-            # 早停
-            if avg_loss < best_loss:
-                best_loss = avg_loss
+            # === 验证阶段 ===
+            self.model.eval()
+            with torch.no_grad():
+                val_return_pred, val_direction_pred = self.model(X_val_tensor, return_direction=True)
+                val_direction_label = torch.sign(y_val_tensor)
+                val_return_loss = return_criterion(val_return_pred, y_val_tensor)
+                val_direction_loss = direction_criterion(val_direction_pred, val_direction_label)
+                val_loss = (val_return_loss + 0.1 * val_direction_loss).item()
+            
+            # 早停：基于验证集loss
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                best_epoch = epoch + 1
                 patience_counter = 0
+                # 保存最佳模型权重
+                best_model_state = {k: v.clone() for k, v in self.model.state_dict().items()}
             else:
                 patience_counter += 1
             
             if patience_counter >= patience:
-                print(f"    早停于第 {epoch+1} 轮, 最佳损失: {best_loss:.6f}")
+                print(f"    早停于第 {epoch+1} 轮, 最佳验证loss: {best_val_loss:.6f}")
                 break
             
             if (epoch + 1) % 10 == 0:
-                print(f"    Epoch {epoch+1}/{self.epochs}, Loss: {avg_loss:.6f}")
+                print(f"    Epoch {epoch+1}/{self.epochs}, Train Loss: {avg_train_loss:.6f}, Val Loss: {val_loss:.6f}")
+        
+        # 恢复最佳模型权重
+        if best_model_state is not None:
+            self.model.load_state_dict(best_model_state)
+            print(f"  已恢复最佳验证loss时的模型权重 (val_loss={best_val_loss:.6f})")
+        
+        # 保存checkpoint用于复现
+        ckpt_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output')
+        os.makedirs(ckpt_dir, exist_ok=True)
+        ckpt_path = os.path.join(ckpt_dir, 'model_checkpoint.pt')
+        torch.save({
+            'model_state_dict': self.model.state_dict(),
+            'model_config': {
+                'input_dim': input_dim,
+                'seq_len': self.seq_length,
+                'd_model': self.d_model,
+                'n_heads': self.n_heads,
+                'n_layers': self.n_layers,
+                'd_ff': self.d_ff,
+                'dropout': self.dropout,
+                'n_stocks': actual_n_stocks if self.use_itransformer else n_stocks,
+                'use_itransformer': self.use_itransformer,
+            },
+            'best_val_loss': best_val_loss,
+            'stock_scalers': {k: {'mean': v.mean_, 'scale': v.scale_} for k, v in stock_scalers.items()} if self.use_itransformer else {},
+        }, ckpt_path)
+        print(f"  模型checkpoint已保存: {ckpt_path}")
         
         # 预测
         print(f"\n  生成预测结果...")
         self.model.eval()
         
-        # 分批预测以防OOM
+        # === 验证集预测 ===
+        val_predictions_list = []
+        val_dataset = TensorDataset(X_val_tensor)
+        val_pred_loader = DataLoader(val_dataset, batch_size=large_batch_size, shuffle=False)
+        
+        with torch.no_grad():
+            for batch_X, in val_pred_loader:
+                pred, _ = self.model(batch_X, return_direction=True)
+                val_predictions_list.extend(pred.cpu().numpy().flatten())
+        
+        val_preds = np.array(val_predictions_list)
+        val_acts = np.array(y_val_flat)
+        val_min_len = min(len(val_preds), len(val_acts))
+        val_preds = val_preds[:val_min_len]
+        val_acts = val_acts[:val_min_len]
+        
+        val_results_df = pd.DataFrame({
+            'date': date_val_all[:val_min_len],
+            'stock_code': stock_val_all[:val_min_len],
+            'actual': val_acts,
+            'predicted': val_preds
+        })
+        
+        val_direction_correct = np.sum((val_preds > 0) == (val_acts > 0))
+        val_direction_accuracy = val_direction_correct / len(val_preds) if len(val_preds) > 0 else 0
+        val_mse = mean_squared_error(val_acts, val_preds)
+        
+        print(f"  验证集预测: {len(val_preds)}条, 方向准确率={val_direction_accuracy:.4f}, MSE={val_mse:.6f}")
+        
+        # === 测试集预测 ===
         all_predictions = []
         test_dataset = TensorDataset(X_test_tensor)
         test_loader = DataLoader(test_dataset, batch_size=large_batch_size, shuffle=False)
@@ -951,10 +1101,16 @@ class TransformerPredictor:
             stock_attn = self.model.stock_attention_weights
         
         return {
-            'predictions': results_df,
+            'predictions': results_df,          # 测试集预测（最终报告用）
+            'val_predictions': val_results_df,   # 验证集预测（Optuna选参用）
             'mse': mse,
             'mae': mae,
             'direction_accuracy': direction_accuracy,
+            'val_mse': val_mse,
+            'val_direction_accuracy': val_direction_accuracy,
+            'best_val_loss': best_val_loss,
+            'best_epoch': best_epoch,
+            'final_train_loss': avg_train_loss,
             'model': self.model,
             'stock_attention': stock_attn,
             'stock_codes': self.stock_codes
