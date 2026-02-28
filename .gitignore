@@ -12,19 +12,15 @@ venv/
 .ipynb_checkpoints/
 
 # Data files
-*.csv
-*.pkl
+
 *.parquet
-*.h5
+
 *.hdf5
 
-# Model files
-*.pth
-*.pt
-*.onnx
+
 
 # Output
-*.log
+
 nohup.out
 
 # IDE
@@ -40,3 +36,6 @@ ecofinal/chronos-forecasting-main/
 ecofinal/金融数据分析与智能量化交易应用PPT_2025/
 ecofinal/金融数据分析与智能量化交易应用代码_2025/
 output/
+
+# Local reference docs
+《金融数据分析与智能量化交易应用设计课程》论文撰写说明.md
