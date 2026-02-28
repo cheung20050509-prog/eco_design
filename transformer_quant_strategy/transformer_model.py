@@ -920,7 +920,7 @@ class TransformerPredictor:
         # 改用MSELoss让回归损失和方向损失在同一量级
         return_criterion = nn.MSELoss()  # 收益预测损失
         direction_criterion = nn.MSELoss()  # 方向预测损失
-        optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.learning_rate, weight_decay=0.02)
+        optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.learning_rate, weight_decay=0.05)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=20, T_mult=2)
         
         # 训练模型
@@ -929,7 +929,7 @@ class TransformerPredictor:
         best_val_loss = float('inf')
         best_model_state = None
         best_epoch = 0
-        patience = 50  # 增加耐心值，让多股票模型训练更充分
+        patience = 30  # 更严格的早停，防止过拟合
         patience_counter = 0
         accumulation_steps = max(1, 512 // large_batch_size)  # 梯度累积，等效batch_size=512
         print(f"  梯度累积步数: {accumulation_steps} (等效Batch Size = {large_batch_size * accumulation_steps})")

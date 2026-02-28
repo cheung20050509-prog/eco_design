@@ -359,8 +359,24 @@ def main():
     
     # 生成交易信号
     print("\n[4.1] 生成交易信号...")
+    def normalize_predictions(predictions_df):
+        """将预测值按日截面z-score标准化"""
+        df = predictions_df.copy()
+        def zscore_group(group):
+            mean = group['predicted'].mean()
+            std = group['predicted'].std()
+            if std > 1e-10:
+                group['predicted'] = (group['predicted'] - mean) / std
+            else:
+                group['predicted'] = 0.0
+            return group
+        return df.groupby('date', group_keys=False).apply(zscore_group)
+
+    print("\n  [预测值标准化] 将预测值转换为截面Z-Score以适配策略阈值")
+    normalized_predictions = normalize_predictions(model_results['predictions'])
+
     signals = strategy_module.generate_signals(
-        predictions=model_results['predictions'],
+        predictions=normalized_predictions,
         feature_data=feature_data
     )
     

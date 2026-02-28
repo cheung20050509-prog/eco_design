@@ -52,6 +52,7 @@
 \providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
 \newlabel{tab:stock_universe}{{1}{9}{Stock universe composition by sector.\relax }{table.caption.2}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Data Cleaning}{9}{subsection.3.2}\protected@file@percent }
+\newlabel{sec:data_cleaning}{{3.2}{9}{Data Cleaning}{subsection.3.2}{}}
 \citation{arlot2010survey}
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Feature Engineering}{10}{subsection.3.3}\protected@file@percent }
 \@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Summary of 81 engineered features across 13 categories.\relax }}{11}{table.caption.3}\protected@file@percent }
@@ -70,44 +71,47 @@
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {4.1.6}Training Protocol and Reproducibility}{14}{subsubsection.4.1.6}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Trading Strategy Design}{14}{subsection.4.2}\protected@file@percent }
 \newlabel{sec:strategy}{{4.2}{14}{Trading Strategy Design}{subsection.4.2}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.2.1}Signal Generation}{14}{subsubsection.4.2.1}\protected@file@percent }
-\citation{kelly1956new}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.2.1}Signal Generation with Z-Score Normalization}{14}{subsubsection.4.2.1}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {4.2.2}Nine-Rule Signal Filtering}{15}{subsubsection.4.2.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.2.3}Kelly Criterion Position Sizing}{15}{subsubsection.4.2.3}\protected@file@percent }
-\citation{akiba2019optuna}
+\citation{kelly1956new}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.2.3}Kelly Criterion Position Sizing}{16}{subsubsection.4.2.3}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {4.2.4}Risk Management}{16}{subsubsection.4.2.4}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {4.2.5}Backtesting Engine}{16}{subsubsection.4.2.5}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Two-Phase Hyperparameter Optimization}{16}{subsection.4.3}\protected@file@percent }
-\newlabel{sec:optuna}{{4.3}{16}{Two-Phase Hyperparameter Optimization}{subsection.4.3}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.3.1}Motivation}{16}{subsubsection.4.3.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.3.2}Framework Design}{16}{subsubsection.4.3.2}\protected@file@percent }
+\citation{akiba2019optuna}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Two-Phase Hyperparameter Optimization}{17}{subsection.4.3}\protected@file@percent }
+\newlabel{sec:optuna}{{4.3}{17}{Two-Phase Hyperparameter Optimization}{subsection.4.3}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.3.1}Motivation}{17}{subsubsection.4.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.3.2}Framework Design}{17}{subsubsection.4.3.2}\protected@file@percent }
 \citation{sharpe1966mutual}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.3.3}Scoring Function}{17}{subsubsection.4.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.3.3}Scoring Function}{18}{subsubsection.4.3.3}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {5}Experimental Results and Analysis}{18}{section.5}\protected@file@percent }
 \newlabel{sec:experiments}{{5}{18}{Experimental Results and Analysis}{section.5}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Experimental Environment}{18}{subsection.5.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Data Integrity Measures}{18}{subsection.5.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Experimental Design}{18}{subsection.5.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}Hyperparameter Optimization Results}{19}{subsection.5.4}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Best trial configuration from two-phase Optuna optimization.\relax }}{19}{table.caption.4}\protected@file@percent }
-\newlabel{tab:optuna_best}{{3}{19}{Best trial configuration from two-phase Optuna optimization.\relax }{table.caption.4}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.5}Strategy Comparison}{20}{subsection.5.5}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Performance comparison of trading strategies on the 2025 test set.\relax }}{20}{table.caption.5}\protected@file@percent }
-\newlabel{tab:comparison}{{4}{20}{Performance comparison of trading strategies on the 2025 test set.\relax }{table.caption.5}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.6}Visualization and Analysis}{21}{subsection.5.6}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Equity curves comparison: iTransformer strategy vs.\ buy-and-hold vs.\ MA crossover.\relax }}{21}{figure.caption.6}\protected@file@percent }
-\newlabel{fig:equity}{{1}{21}{Equity curves comparison: iTransformer strategy vs.\ buy-and-hold vs.\ MA crossover.\relax }{figure.caption.6}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Drawdown comparison across strategies.\relax }}{22}{figure.caption.7}\protected@file@percent }
-\newlabel{fig:drawdown}{{2}{22}{Drawdown comparison across strategies.\relax }{figure.caption.7}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Attention weight heatmap showing learned cross-stock correlations.\relax }}{22}{figure.caption.8}\protected@file@percent }
-\newlabel{fig:attention}{{3}{22}{Attention weight heatmap showing learned cross-stock correlations.\relax }{figure.caption.8}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.7}Discussion}{22}{subsection.5.7}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {6}Conclusion}{23}{section.6}\protected@file@percent }
-\newlabel{sec:conclusion}{{6}{23}{Conclusion}{section.6}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.1}Summary}{23}{subsection.6.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.2}Strengths}{23}{subsection.6.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.3}Limitations}{24}{subsection.6.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.4}Future Directions}{24}{subsection.6.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Data Integrity Measures}{19}{subsection.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Experimental Design}{19}{subsection.5.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}Hyperparameter Optimization Results}{20}{subsection.5.4}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Best configuration from two-phase Optuna optimization with anti-overfitting measures.\relax }}{20}{table.caption.4}\protected@file@percent }
+\newlabel{tab:optuna_best}{{3}{20}{Best configuration from two-phase Optuna optimization with anti-overfitting measures.\relax }{table.caption.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.5}Strategy Comparison}{21}{subsection.5.5}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Performance comparison: iTransformer strategy vs.\ Buy-and-Hold baseline on test set.\relax }}{21}{table.caption.5}\protected@file@percent }
+\newlabel{tab:comparison}{{4}{21}{Performance comparison: iTransformer strategy vs.\ Buy-and-Hold baseline on test set.\relax }{table.caption.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.6}Ablation Study: Removing the iTransformer Prediction Model}{22}{subsection.5.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.7}Visualization and Analysis}{22}{subsection.5.7}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Ablation under the same main-experiment window (2024-03-13 to 2025-02-05): full model vs. w/o iTransformer.\relax }}{23}{table.caption.6}\protected@file@percent }
+\newlabel{tab:ablation_no_model}{{5}{23}{Ablation under the same main-experiment window (2024-03-13 to 2025-02-05): full model vs. w/o iTransformer.\relax }{table.caption.6}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Equity curves comparison: iTransformer strategy vs.\ buy-and-hold vs.\ MA crossover.\relax }}{23}{figure.caption.7}\protected@file@percent }
+\newlabel{fig:equity}{{1}{23}{Equity curves comparison: iTransformer strategy vs.\ buy-and-hold vs.\ MA crossover.\relax }{figure.caption.7}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.8}Discussion}{23}{subsection.5.8}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Drawdown comparison across strategies.\relax }}{24}{figure.caption.8}\protected@file@percent }
+\newlabel{fig:drawdown}{{2}{24}{Drawdown comparison across strategies.\relax }{figure.caption.8}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Attention weight heatmap showing learned cross-stock correlations.\relax }}{24}{figure.caption.9}\protected@file@percent }
+\newlabel{fig:attention}{{3}{24}{Attention weight heatmap showing learned cross-stock correlations.\relax }{figure.caption.9}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {6}Conclusion}{25}{section.6}\protected@file@percent }
+\newlabel{sec:conclusion}{{6}{25}{Conclusion}{section.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.1}Summary}{25}{subsection.6.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2}Strengths}{26}{subsection.6.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.3}Limitations}{27}{subsection.6.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.4}Future Directions}{27}{subsection.6.4}\protected@file@percent }
 \bibstyle{plainnat}
 \bibdata{references}
 \bibcite{akiba2019optuna}{{1}{2019}{{Akiba et~al.}}{{Akiba, Sano, Yanase, Ohta, and Koyama}}}
@@ -124,8 +128,8 @@
 \bibcite{wu2021autoformer}{{12}{2021}{{Wu et~al.}}{{Wu, Xu, Wang, and Long}}}
 \bibcite{zhang2020transformer_stock}{{13}{2022}{{Zhang et~al.}}{{Zhang, Qin, Zhang, Lin, and Chen}}}
 \bibcite{zhou2021informer}{{14}{2021}{{Zhou et~al.}}{{Zhou, Zhang, Peng, Zhang, Li, Xiong, and Zhang}}}
-\@writefile{toc}{\contentsline {section}{\numberline {A}System Architecture Overview}{26}{appendix.A}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces System module descriptions.\relax }}{27}{table.caption.10}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {B}Key Algorithm: Inverted Attention}{27}{appendix.B}\protected@file@percent }
-\@writefile{loa}{\contentsline {algorithm}{\numberline {1}{\ignorespaces Inverted Multi-Head Self-Attention for Cross-Stock Modeling\relax }}{27}{algorithm.1}\protected@file@percent }
-\gdef \@abspage@last{27}
+\@writefile{toc}{\contentsline {section}{\numberline {A}System Architecture Overview}{29}{appendix.A}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces System module descriptions.\relax }}{29}{table.caption.11}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {B}Key Algorithm: Inverted Attention}{29}{appendix.B}\protected@file@percent }
+\@writefile{loa}{\contentsline {algorithm}{\numberline {1}{\ignorespaces Inverted Multi-Head Self-Attention for Cross-Stock Modeling\relax }}{30}{algorithm.1}\protected@file@percent }
+\gdef \@abspage@last{30}

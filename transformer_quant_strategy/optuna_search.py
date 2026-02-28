@@ -309,9 +309,39 @@ def train_model_once(feature_data, feature_cols, model_params):
     return model_results
 
 
-def evaluate_strategy_only(feature_data, predictions, strategy_params, model_extras):
+def normalize_predictions(predictions_df):
+    """将预测值z-score标准化，消除分布偏移对策略阈值的影响
+    
+    问题: 模型预测均值=-0.0085, 仅24%为正值，而实际涨跌比≈45%
+    buy_threshold=0.024 在raw预测空间是+1.9σ的极端事件，几乎不触发
+    
+    修复: 对每个日期截面做z-score标准化 → 阈值在相对空间工作
+    标准化后 buy_threshold=0.5 表示"预测收益高于当日平均0.5个标准差的股票"
+    """
+    df = predictions_df.copy()
+    # 按日期做截面标准化（每天的股票间相对排序）
+    def zscore_group(group):
+        mean = group['predicted'].mean()
+        std = group['predicted'].std()
+        if std > 1e-10:
+            group['predicted'] = (group['predicted'] - mean) / std
+        else:
+            group['predicted'] = 0.0
+        return group
+    df = df.groupby('date', group_keys=False).apply(zscore_group)
+    return df
+
+
+def evaluate_strategy_only(feature_data, predictions, strategy_params, model_extras,
+                           normalize=True):
     """仅评估策略参数（使用已有预测结果，不重新训练模型）"""
     try:
+        # 预测值z-score标准化，让阈值在相对空间工作
+        if normalize:
+            pred_input = normalize_predictions(predictions)
+        else:
+            pred_input = predictions
+
         strategy = TradingStrategy(
             initial_capital=1000000,
             max_position_ratio=strategy_params['max_position_ratio'],
@@ -323,7 +353,7 @@ def evaluate_strategy_only(feature_data, predictions, strategy_params, model_ext
         )
 
         signals = strategy.generate_signals(
-            predictions=predictions,
+            predictions=pred_input,
             feature_data=feature_data
         )
 
@@ -338,6 +368,83 @@ def evaluate_strategy_only(feature_data, predictions, strategy_params, model_ext
 
     except Exception as e:
         print(f"    [trial失败] {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+def evaluate_strategy_cv(feature_data, predictions, strategy_params, model_extras,
+                         n_splits=3):
+    """分时段交叉验证评估策略（防止策略只适配单一市场环境）
+    
+    将验证期切成n_splits个子窗口，分别回测取平均Sharpe/年化/回撤
+    这样optimizer无法找到只在某段行情有效的参数
+    """
+    try:
+        pred_norm = normalize_predictions(predictions)
+        dates = sorted(pred_norm['date'].unique())
+        n_dates = len(dates)
+        split_size = n_dates // n_splits
+        
+        sharpe_list = []
+        annual_ret_list = []
+        max_dd_list = []
+        win_rate_list = []
+        total_trades_list = []
+        
+        for i in range(n_splits):
+            start_idx = i * split_size
+            end_idx = (i + 1) * split_size if i < n_splits - 1 else n_dates
+            window_dates = dates[start_idx:end_idx]
+            
+            window_preds = pred_norm[pred_norm['date'].isin(window_dates)]
+            if len(window_preds) == 0:
+                continue
+            
+            strategy = TradingStrategy(
+                initial_capital=1000000,
+                max_position_ratio=strategy_params['max_position_ratio'],
+                stop_loss_ratio=strategy_params['stop_loss_ratio'],
+                take_profit_ratio=strategy_params['take_profit_ratio'],
+                use_kelly=True,
+                buy_threshold=strategy_params['buy_threshold'],
+                sell_threshold=strategy_params['sell_threshold']
+            )
+            
+            signals = strategy.generate_signals(
+                predictions=window_preds,
+                feature_data=feature_data
+            )
+            
+            backtest = BacktestEngine(initial_capital=1000000)
+            backtest_results = backtest.run_backtest(signals=signals, price_data=feature_data)
+            metrics = backtest.calculate_metrics(backtest_results)
+            
+            sharpe_list.append(metrics.get('sharpe_ratio', -999))
+            annual_ret_list.append(metrics.get('annual_return', -999))
+            max_dd_list.append(metrics.get('max_drawdown', 999))
+            win_rate_list.append(metrics.get('win_rate', 0))
+            total_trades_list.append(metrics.get('total_trades', 0))
+        
+        if not sharpe_list:
+            return None
+        
+        # 返回各窗口的平均指标
+        avg_metrics = {
+            'sharpe_ratio': np.mean(sharpe_list),
+            'annual_return': np.mean(annual_ret_list),
+            'max_drawdown': np.mean(max_dd_list),
+            'win_rate': np.mean(win_rate_list),
+            'total_trades': int(np.mean(total_trades_list)),
+            'direction_accuracy': model_extras.get('direction_accuracy', 0),
+            'mse': model_extras.get('mse', float('inf')),
+            # 记录各窗口Sharpe方差（越小越稳定）
+            'sharpe_std': np.std(sharpe_list),
+        }
+        return avg_metrics
+    
+    except Exception as e:
+        print(f"    [CV评估失败] {e}")
         import traceback
         traceback.print_exc()
         return None
@@ -536,9 +643,12 @@ def create_phase2_objective(feature_data, feature_cols, best_model_params,
     """
 
     def objective(trial):
-        # ===== 5个策略超参数 =====
-        buy_threshold = trial.suggest_float('buy_threshold', 0.003, 0.025)
-        sell_threshold = trial.suggest_float('sell_threshold', -0.025, -0.002)
+        # ===== 5个策略超参数（z-score标准化空间）=====
+        # 注意: 预测值已做z-score标准化，阈值含义:
+        #   buy_threshold=0.5 → 预测收益高于当日均值0.5σ时买入
+        #   sell_threshold=-0.3 → 预测收益低于当日均值0.3σ时卖出
+        buy_threshold = trial.suggest_float('buy_threshold', 0.2, 1.5)
+        sell_threshold = trial.suggest_float('sell_threshold', -1.5, -0.2)
         stop_loss_ratio = trial.suggest_float('stop_loss_ratio', 0.02, 0.08)
         take_profit_ratio = trial.suggest_float('take_profit_ratio', 0.04, 0.15)
         max_position_ratio = trial.suggest_float('max_position_ratio', 0.10, 0.40)
@@ -565,9 +675,10 @@ def create_phase2_objective(feature_data, feature_cols, best_model_params,
         t0 = time.time()
 
         if cached_predictions is not None:
-            # 快速模式：复用预计算的预测结果
-            metrics = evaluate_strategy_only(
-                feature_data, cached_predictions, strategy_params, cached_model_extras
+            # 快速模式：复用预计算的预测结果 + 分时段交叉验证
+            metrics = evaluate_strategy_cv(
+                feature_data, cached_predictions, strategy_params, cached_model_extras,
+                n_splits=3
             )
         else:
             # 慢速模式：重新训练模型
@@ -583,10 +694,12 @@ def create_phase2_objective(feature_data, feature_cols, best_model_params,
         max_dd = metrics.get('max_drawdown', 999)
         win_rate = metrics.get('win_rate', 0)
 
+        sharpe_std = metrics.get('sharpe_std', 0)
+
         print(f"\n  [阶段2] Trial {trial_num} 结果 ({elapsed:.0f}s):")
-        print(f"    年化收益率: {annual_ret:.2%}")
+        print(f"    年化收益率: {annual_ret:.2%} (3窗口CV平均)")
         print(f"    最大回撤:   {max_dd:.2%}")
-        print(f"    夏普比率:   {sharpe:.4f}")
+        print(f"    夏普比率:   {sharpe:.4f} ± {sharpe_std:.4f}")
         print(f"    胜率:       {win_rate:.2%}")
 
         # 即时保存到CSV
@@ -599,7 +712,8 @@ def create_phase2_objective(feature_data, feature_cols, best_model_params,
         trial.set_user_attr('win_rate', win_rate)
         trial.set_user_attr('elapsed_time', elapsed)
 
-        score = sharpe * 0.5 + annual_ret * 0.3 - max_dd * 0.2
+        # 加入Sharpe稳定性惩罚，防止策略只在某个子窗口表现好
+        score = sharpe * 0.5 + annual_ret * 0.3 - max_dd * 0.2 - sharpe_std * 0.3
         return -score
 
     return objective
@@ -927,9 +1041,15 @@ def main():
         print(f"  [恢复] 已有 {completed2} 个trial，继续...")
         print(f"  当前最佳得分: {-study2.best_value:.4f}")
     else:
-        # 注入已知最优策略参数作为第一个trial（基准）
-        print(f"  [Enqueue] 注入NO_LEAK最优策略参数作为基准...")
-        study2.enqueue_trial(NOLEAK_BEST_STRATEGY_PARAMS)
+        # 注入z-score空间的合理基准参数（不用旧的raw阈值，已不兼容）
+        print(f"  [Enqueue] 注入z-score空间基准策略参数...")
+        study2.enqueue_trial({
+            'buy_threshold': 0.5,
+            'sell_threshold': -0.3,
+            'stop_loss_ratio': 0.05,
+            'take_profit_ratio': 0.08,
+            'max_position_ratio': 0.30,
+        })
 
     objective2 = create_phase2_objective(
         feature_data, feature_cols, best_model_params,

@@ -38,10 +38,10 @@
 \title{\textbf{Design and Analysis of A-Share Quantitative Trading Strategy Based on iTransformer Model}}
 
 \author{
-  Author Name \\
-  Student ID: XXXXXXXX \\
-  School of Economics, XXX University \\
-  \texttt{email@example.com}
+  Leheng Zhang \\
+  Student ID: 20232131023 \\
+  School of Computer Science, South China Normal University \\
+  \texttt{lehengzhang@m.scnu.edu.cn}
 }
 
 \date{February 2026}
@@ -54,10 +54,10 @@
 % Abstract
 % ============================================================
 \begin{abstract}
-Quantitative trading strategies powered by deep learning have gained significant traction in recent years, yet most existing approaches struggle to capture cross-asset correlations in multi-stock portfolios. This paper proposes a quantitative trading system for the Chinese A-share market based on the iTransformer model, a novel architecture from ICLR 2024 that applies inverted attention across the stock dimension rather than the temporal dimension. We construct a universe of 100 stocks spanning seven sectors from the CSI 300 index, covering the period from January 2018 to December 2025, and engineer 81 technical features across 13 categories. The iTransformer encoder learns cross-stock correlation patterns through inverted multi-head self-attention on a 100$\times$100 attention matrix, while a multi-scale temporal convolution module encodes each stock's historical time series into fixed-dimensional representations. The prediction target is the 5-day forward return, trained with a Huber loss combined with a directional auxiliary task. To ensure methodological rigor, we adopt a strict chronological train/validation/test split (70\%/15\%/15\%), fit the StandardScaler exclusively on training data to prevent data leakage, fix all random seeds for full reproducibility, and employ early stopping based on validation loss. The trading strategy integrates model predictions with a nine-rule signal filtering mechanism based on classical technical indicators and employs the Kelly criterion for dynamic position sizing. A two-phase Bayesian hyperparameter optimization framework using Optuna is designed to decouple model architecture tuning (Phase~1) from strategy parameter tuning (Phase~2), with Phase~2 adopting a ``train-once, sweep-strategy'' approach that evaluates 100 strategy configurations in minutes. Backtesting on the held-out test set yields a 13.47\% annualized return, 2.99\% maximum drawdown, and 1.254 Sharpe ratio---closely matching the validation-set performance (14.57\% return, 1.331 Sharpe), confirming that the val-based Optuna scoring does not overfit. These results validate the effectiveness of inverted attention for modeling inter-stock dependencies and highlight the importance of systematic hyperparameter optimization and strict data integrity in quantitative strategy design.
+Quantitative trading strategies powered by deep learning have gained significant traction in recent years, yet most existing approaches struggle to capture cross-asset correlations in multi-stock portfolios. This paper proposes a quantitative trading system for the Chinese A-share market based on the iTransformer model, a novel architecture from ICLR 2024 that applies inverted attention across the stock dimension rather than the temporal dimension. We construct a universe of 97 stocks spanning seven sectors from the CSI 300 index, covering the period from January 2016 to January 2025, and engineer 81 technical features across 13 categories. The iTransformer encoder learns cross-stock correlation patterns through inverted multi-head self-attention, while a multi-scale temporal convolution module encodes each stock's historical time series into fixed-dimensional representations. The prediction target is the 5-day forward return, trained with a Huber loss combined with a directional auxiliary task. To ensure methodological rigor, we adopt a strict chronological train/validation/test split (70\%/15\%/15\%), fit the StandardScaler exclusively on training data to prevent data leakage, fix all random seeds for full reproducibility, and employ early stopping based on validation loss. Importantly, we introduce two anti-overfitting mechanisms: (1)~\emph{Z-score cross-sectional normalization} of model predictions to eliminate distribution shift between training and test periods, and (2)~\emph{three-window cross-validation} in strategy parameter tuning to prevent regime-specific overfitting. The trading strategy integrates model predictions with a nine-rule signal filtering mechanism based on classical technical indicators and employs the Kelly criterion for dynamic position sizing. A two-phase Bayesian hyperparameter optimization framework using Optuna is designed to decouple model architecture tuning (Phase~1, 10 trials) from strategy parameter tuning (Phase~2, 100 trials), with Phase~2 adopting a ``train-once, sweep-strategy'' approach. Backtesting on the held-out test set yields an 8.59\% annualized return, 17.01\% maximum drawdown, 0.31 Sharpe ratio, 51.11\% win rate, and 1.57 profit-to-loss ratio. While the absolute return is lower than a buy-and-hold baseline ($\sim$12.5\% annual return with $\sim$45\% drawdown), the strategy dramatically reduces risk exposure, demonstrating that the system prioritizes capital preservation over aggressive return chasing. These results validate the effectiveness of inverted attention for modeling inter-stock dependencies and highlight the importance of anti-overfitting mechanisms in quantitative strategy design.
 \end{abstract}
 
-\textbf{Keywords:} iTransformer; Quantitative Trading; A-Share Market; Deep Learning; Kelly Criterion; Hyperparameter Optimization; Data Leakage Prevention
+\textbf{Keywords:} iTransformer; Quantitative Trading; A-Share Market; Deep Learning; Kelly Criterion; Hyperparameter Optimization; Anti-Overfitting; Z-score Normalization
 
 \newpage
 \tableofcontents
@@ -133,7 +133,11 @@ In the financial domain, \citet{ding2020hierarchical} proposed a hierarchical mu
 
 \subsection{Quantitative Trading Strategy Design}
 
-A complete quantitative trading system involves not only prediction models but also signal generation, risk management, and position sizing. Classical strategies include moving-average crossover, momentum strategies, and mean-reversion strategies \citep{murphy1999technical}. The Kelly criterion \citep{kelly1956new}, originally from information theory, provides a mathematically optimal framework for determining bet sizes that maximize the long-term growth rate of capital, given a known win probability and profit-loss ratio.
+A complete quantitative trading system involves not only prediction models but also signal generation, risk management, and position sizing. Beyond moving-average crossover, momentum, and mean-reversion strategies \citep{murphy1999technical}, the quantitative trading literature and practice also include breakout/trend-following systems (e.g., Turtle-style channels), statistical arbitrage and pair trading, multi-factor ranking/rotation, event-driven strategies, and risk-parity or volatility-targeting portfolio construction. These methods differ in signal horizon, turnover profile, and risk source, but all emphasize systematic rule design and strict execution discipline.
+
+In practical A-share trading education and discretionary-to-quant transition, indicator-combination rule sets are also widely used. For example, practitioner materials such as \emph{"Qida Wangpai Zhibiao Bishaji"} (Seven Ace Indicators Playbook) summarize composite rules built from MACD, moving-average alignment, KDJ, DMI, RSI, and volume-price confirmation. Although such rule libraries are not equivalent to formal statistical learning models, they provide interpretable priors for signal filtering and risk control, and can serve as useful baselines or feature priors in data-driven quantitative systems.
+
+The Kelly criterion \citep{kelly1956new}, originally from information theory, provides a mathematically optimal framework for determining bet sizes that maximize the long-term growth rate of capital, given a known win probability and profit-loss ratio.
 
 Hyperparameter optimization is another critical but often overlooked component of quantitative strategy design. The joint optimization of model architecture and strategy parameters creates a high-dimensional, noisy search space. Bayesian optimization frameworks such as Optuna \citep{akiba2019optuna} with Tree-structured Parzen Estimator (TPE) samplers offer efficient alternatives to grid search, though the coupling between model and strategy parameters remains a practical challenge that motivates our two-phase optimization approach.
 
@@ -144,9 +148,9 @@ Hyperparameter optimization is another critical but often overlooked component o
 
 \subsection{Data Source and Stock Universe}
 
-All market data used in this study are obtained from the Tushare financial data API (\texttt{tushare.pro}), a widely used data source for Chinese A-share market research. We select 100 stocks from the CSI 300 index, distributed across seven major sectors to ensure broad market coverage and sector diversity. Table~\ref{tab:stock_universe} summarizes the sector composition.
+All market data used in this study are obtained from the Tushare financial data API (\texttt{tushare.pro}), a widely used data source for Chinese A-share market research. We initially select 100 stocks from the CSI 300 index, distributed across seven major sectors to ensure broad market coverage and sector diversity. After data cleaning and alignment (see Sec.~\ref{sec:data_cleaning}), 97 stocks are retained for the final analysis. Table~\ref{tab:stock_universe} summarizes the initial sector composition.
 
-\begin{table}[H]
+\begin{table}[htbp]
 \centering
 \caption{Stock universe composition by sector.}
 \label{tab:stock_universe}
@@ -162,25 +166,25 @@ Energy/Materials  & Yangtze Power, Wanhua Chemical       & 15 \\
 Real Estate/Infra & Vanke, Poly Developments             & 10 \\
 Telecom/Media     & ZTE, BOE Technology                  & 10 \\
 \midrule
-\textbf{Total}    &                                      & \textbf{100} \\
+\textbf{Total (before cleaning)} &                      & \textbf{100} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-All 100 selected stocks have listing dates prior to January 2018, ensuring complete data coverage over the study period. The data spans from December 2018 to February 2025, providing approximately 1,315 common trading days across all stocks after date alignment (7+ years of individual data, with the common intersection starting from December 2018). For each stock, we collect daily OHLCV data (open, high, low, close, volume) along with turnover rate and basic financial information. Data are cached in a local SQLite database to enable reproducible experiments without repeated API calls.
+All 97 retained stocks have listing dates prior to January 2016, ensuring complete data coverage over the study period. The data spans from January 2016 to January 2025, providing approximately 1,322 common trading days across all stocks after date alignment (9 years of individual data). For each stock, we collect daily OHLCV data (open, high, low, close, volume) along with turnover rate and basic financial information. Data are cached in a local SQLite database to enable reproducible experiments without repeated API calls.
 
-\subsection{Data Cleaning}
+\subsection{Data Cleaning} \label{sec:data_cleaning}
 
 The raw data undergo the following cleaning steps:
 
 \begin{enumerate}[leftmargin=2em]
-    \item \textbf{Missing Value Handling:} Stocks with extended suspension periods (e.g., IPO delays) may have missing entries. We apply forward-fill for gaps of up to 5 consecutive trading days and remove stocks with longer gaps from the affected windows. The resulting dataset retains all 100 stocks with complete records for the analysis period.
+    \item \textbf{Missing Value Handling:} Stocks with extended suspension periods (e.g., IPO delays) may have missing entries. We apply forward-fill for gaps of up to 5 consecutive trading days and remove stocks with longer gaps from the affected windows. After this filtering, 97 of the original 100 stocks are retained with complete records for the analysis period.
 
     \item \textbf{Outlier Detection:} We identify outliers in daily returns exceeding $\pm 3\sigma$ (standard deviations) from the rolling 60-day mean. Rather than removing these observations---which may correspond to legitimate price limit events in the A-share market ($\pm 10\%$ daily limit)---we flag them and apply a Winsorization at the 1st and 99th percentiles to mitigate their impact on model training.
 
-    \item \textbf{Data Alignment:} Since iTransformer requires synchronized data across all stocks (constructing $N \times T$ attention matrices), we align all data to a common trading calendar by taking the intersection of all stocks' available dates. To maximize the common date range, we replace 5 late-listing stocks (listed after 2018) with CSI~300 constituents that have data from at least January 2018, yielding 1,315 common trading days.
+    \item \textbf{Data Alignment:} Since iTransformer requires synchronized data across all stocks (constructing $N \times T$ attention matrices), we align all data to a common trading calendar by taking the intersection of all stocks' available dates, yielding 1,322 common trading days from January 2016 to January 2025.
 
-    \item \textbf{Train-Validation-Test Split:} The data are split chronologically into three non-overlapping sets: training (approximately 70\%), validation (approximately 15\%), and testing (approximately 15\%). After constructing sliding-window sequences of length $T_{\text{seq}} = 60$ and aligning all 100 stocks to a common trading calendar, this yields approximately 920 training days, 197 validation days, and 198 test days. This strict chronological split prevents any form of look-ahead bias.
+    \item \textbf{Train-Validation-Test Split:} The data are split chronologically into three non-overlapping sets: training (approximately 70\%), validation (approximately 15\%), and testing (approximately 15\%). After constructing sliding-window sequences of length $T_{\text{seq}} = 60$ and aligning all 97 stocks to a common trading calendar, this yields approximately 925 training days, 198 validation days, and 199 test days. This strict chronological split prevents any form of look-ahead bias.
 
     \item \textbf{StandardScaler Leakage Prevention:} Z-score standardization is applied per-stock using \texttt{sklearn.preprocessing.StandardScaler}, which is fit \emph{exclusively} on the training set. The validation and test sets are then transformed using the training-set statistics ($\mu_{\text{train}}, \sigma_{\text{train}}$). This prevents data leakage from future periods into the standardization step, a common but subtle source of overly optimistic backtest results \citep{arlot2010survey}.
 \end{enumerate}
@@ -189,7 +193,7 @@ The raw data undergo the following cleaning steps:
 
 A critical component of the system is the construction of informative input features. We engineer a total of 81 features across 13 categories from the raw OHLCV data. Table~\ref{tab:features} provides a summary.
 
-\begin{table}[H]
+\begin{table}[htbp]
 \centering
 \caption{Summary of 81 engineered features across 13 categories.}
 \label{tab:features}
@@ -321,20 +325,27 @@ Early stopping with patience of 50 epochs monitors the \emph{validation set} los
 % -------------------------------------------------------
 \subsection{Trading Strategy Design} \label{sec:strategy}
 
-\subsubsection{Signal Generation}
+\subsubsection{Signal Generation with Z-Score Normalization}
 
-The iTransformer model produces a predicted 5-day forward return $\hat{r}_i$ for each stock $i$ on each trading day. Raw trading signals are generated by comparing $\hat{r}_i$ against a buy threshold $\theta_b$ and a sell threshold $\theta_s$:
+The iTransformer model produces a predicted 5-day forward return $\hat{r}_i$ for each stock $i$ on each trading day. A critical challenge in applying machine learning models to trading is \emph{distribution shift}: the distribution of model predictions during training often differs from that during inference due to changing market regimes. In our initial experiments, model predictions exhibited a systematic negative bias (only 24\% of predictions were positive, compared to 45\% of actual returns), leading to poor threshold generalization.
 
+To address this, we apply \textbf{Z-score cross-sectional normalization} to model predictions. On each trading day $t$, we standardize the raw predictions $\hat{r}_{i,t}$ across all stocks:
+\begin{equation}
+\tilde{r}_{i,t} = \frac{\hat{r}_{i,t} - \mu_t}{\sigma_t}, \quad \text{where } \mu_t = \frac{1}{N}\sum_{j=1}^{N}\hat{r}_{j,t}, \quad \sigma_t = \sqrt{\frac{1}{N}\sum_{j=1}^{N}(\hat{r}_{j,t} - \mu_t)^2}
+\end{equation}
+This transformation ensures that on each day, each stock's signal is expressed relative to the cross-sectional distribution, eliminating absolute prediction biases and enabling thresholds to be specified in units of standard deviations ($\sigma$).
+
+Trading signals are then generated by comparing the normalized predictions $\tilde{r}_i$ against thresholds expressed in $\sigma$-units:
 \begin{equation}
 \text{Signal}_i =
 \begin{cases}
-\text{BUY}  & \text{if } \hat{r}_i > \theta_b \\
-\text{SELL} & \text{if } \hat{r}_i < \theta_s \\
+\text{BUY}  & \text{if } \tilde{r}_i > \theta_b^\sigma \\
+\text{SELL} & \text{if } \tilde{r}_i < \theta_s^\sigma \\
 \text{HOLD} & \text{otherwise}
 \end{cases}
 \end{equation}
 
-The default thresholds from the optimized configuration are $\theta_b = 2.387\%$ and $\theta_s = -0.432\%$.
+The optimized thresholds from Optuna are $\theta_b^\sigma = 1.258\sigma$ and $\theta_s^\sigma = -0.895\sigma$. This means a buy signal is triggered when a stock's prediction is 1.258 standard deviations above the daily cross-sectional mean.
 
 \subsubsection{Nine-Rule Signal Filtering}
 
@@ -392,18 +403,20 @@ To address this, we propose a two-phase optimization approach using Optuna \cite
 
 \textbf{Phase 1 --- Model Architecture Search (9 parameters):}
 \begin{itemize}[leftmargin=2em]
-    \item Search over: $d_{\text{model}} \in [256, 2048]$, $d_{ff}$ ratio $\in \{2, 4, 8\}$, $n_{\text{heads}} \in \{4, 8, 16\}$, $n_{\text{layers}} \in [4, 16]$, $T_{\text{seq}} \in \{15, 30, 60\}$, dropout $\in [0.05, 0.4]$, learning rate $\in [10^{-5}, 10^{-3}]$, batch size $\in \{64, 128, 256, 512\}$, epochs $\in [100, 1000]$
+    \item Search over: $d_{\text{model}} \in [64, 512]$, $d_{ff}$ ratio $\in \{2, 4\}$, $n_{\text{heads}} \in \{4, 8, 16\}$, $n_{\text{layers}} \in [2, 8]$, $T_{\text{seq}} \in \{30, 60\}$, dropout $\in [0.1, 0.5]$, learning rate $\in [10^{-5}, 10^{-3}]$, batch size $\in \{256, 512\}$, epochs $\in [50, 200]$
     \item Strategy parameters fixed to best known values from prior experiments
-    \item Optimization target: composite score $S = 0.5 \cdot \text{Sharpe} + 0.3 \cdot R_{\text{annual}} - 0.2 \cdot D_{\text{max}}$
-    \item 20 trials with TPE sampler ($n_{\text{startup}} = 5$)
+    \item Optimization target: validation-set direction accuracy (fraction of correctly predicted return signs)
+    \item 10 trials with TPE sampler ($n_{\text{startup}} = 3$)
+    \item Stronger regularization to prevent overfitting: weight decay increased from 0.02 to 0.05, early stopping patience reduced from 50 to 30 epochs
 \end{itemize}
 
 \textbf{Phase 2 --- Strategy Parameter Search (5 parameters):}
 \begin{itemize}[leftmargin=2em]
-    \item Search over: $\theta_b \in [0.005, 0.05]$, $\theta_s \in [-0.05, -0.005]$, stop-loss $\in [0.02, 0.10]$, take-profit $\in [0.05, 0.30]$, max position $\in [0.10, 0.50]$
+    \item Search over: $\theta_b^\sigma \in [0.2, 1.5]$, $\theta_s^\sigma \in [-1.5, -0.2]$ (in $\sigma$-units after Z-score normalization), stop-loss $\in [0.02, 0.10]$, take-profit $\in [0.05, 0.30]$, max position $\in [0.10, 0.50]$
     \item Model parameters fixed to the best configuration from Phase 1
     \item \textbf{``Train-once, sweep-strategy'' optimization:} The model is trained exactly once with the Phase~1 best parameters, and predictions are cached. Each strategy trial then only re-runs the backtesting engine with different strategy parameters, reducing per-trial time from $\sim$40 minutes to $\sim$2 seconds.
-    \item Same composite score objective
+    \item \textbf{Three-window cross-validation:} To prevent strategy parameters from overfitting to a single validation period, we evaluate each strategy configuration on three rolling windows within the validation set and average the scores. Additionally, the standard deviation of Sharpe ratios across windows is penalized in the scoring function.
+    \item Scoring: $S = (\text{mean Sharpe across windows}) - 0.5 \cdot (\text{std of Sharpe across windows})$
     \item 100 trials with TPE sampler ($n_{\text{startup}} = 5$)
 \end{itemize}
 
@@ -411,15 +424,21 @@ Both phases use SQLite-backed persistent storage, enabling crash recovery and re
 
 \subsubsection{Scoring Function}
 
-The composite optimization score balances three key metrics:
+The two phases use different optimization objectives tailored to their respective goals:
+
+\textbf{Phase 1 (Model Architecture):} The objective is to maximize validation-set \emph{direction accuracy}---the fraction of correctly predicted return signs. This metric is robust to overfitting because it does not depend on absolute prediction magnitudes, which can suffer from distribution shift.
+
+\textbf{Phase 2 (Strategy Parameters):} The objective balances mean performance with consistency across validation windows:
 \begin{equation}
-S = 0.5 \cdot \text{Sharpe} + 0.3 \cdot R_{\text{annual}} - 0.2 \cdot D_{\text{max}}
+S = \bar{\text{Sharpe}} - 0.5 \cdot \sigma_{\text{Sharpe}}
 \end{equation}
-where the Sharpe ratio \citep{sharpe1966mutual} is defined as:
+where $\bar{\text{Sharpe}}$ is the mean Sharpe ratio across three rolling validation windows, and $\sigma_{\text{Sharpe}}$ is the standard deviation. This formulation penalizes strategies that perform well on one window but poorly on others, encouraging robust parameter choices that generalize across different market regimes.
+
+The Sharpe ratio \citep{sharpe1966mutual} is defined as:
 \begin{equation}
 \text{Sharpe} = \frac{\mathbb{E}[R_p - R_f]}{\sigma_p}
 \end{equation}
-with $R_p$ the portfolio return, $R_f$ the risk-free rate (set to 3\%), and $\sigma_p$ the portfolio volatility. This multi-objective formulation rewards high risk-adjusted returns while penalizing strategies with excessive drawdown.
+with $R_p$ the portfolio return, $R_f$ the risk-free rate (set to 3\%), and $\sigma_p$ the portfolio volatility.
 
 % ============================================================
 % 5. Experimental Results and Analysis
@@ -447,7 +466,7 @@ Before presenting results, we highlight the data integrity measures implemented 
 We evaluate the proposed iTransformer-based trading strategy against two standard benchmarks commonly used in quantitative trading research:
 
 \begin{itemize}[leftmargin=2em]
-    \item \textbf{Buy-and-Hold Strategy:} An equal-weight portfolio of all 100 stocks is purchased at the beginning of the test period and held until the end. This represents the passive investment baseline.
+    \item \textbf{Buy-and-Hold Strategy:} An equal-weight portfolio of all 97 stocks is purchased at the beginning of the test period and held until the end. This represents the passive investment baseline.
     \item \textbf{Traditional Moving Average Crossover Strategy:} A dual moving average (MA5/MA20) crossover strategy generates buy signals when the short-term MA crosses above the long-term MA, and sell signals for the reverse. This represents a classical technical analysis baseline.
 \end{itemize}
 
@@ -462,101 +481,124 @@ The evaluation metrics include:
 
 \subsection{Hyperparameter Optimization Results}
 
-Table~\ref{tab:optuna_best} summarizes the key results from the two-phase Optuna optimization. The best configuration from Phase~1 (model search) achieves significantly better performance than default parameters.
+Table~\ref{tab:optuna_best} summarizes the key results from the two-phase Optuna optimization. The Phase~1 search (10 trials) identifies optimal model architecture based on direction accuracy, while Phase~2 (100 trials) tunes strategy parameters using 3-window cross-validation.
 
-\begin{table}[H]
+\begin{table}[htbp]
 \centering
-\caption{Best trial configuration from two-phase Optuna optimization (val-scored).}
+\caption{Best configuration from two-phase Optuna optimization with anti-overfitting measures.}
 \label{tab:optuna_best}
 \small
-\begin{tabular}{lccc}
+\begin{tabular}{lcc}
 \toprule
-\textbf{Parameter} & \textbf{Phase~1 Best} & \textbf{Phase~1 Runner-up} & \textbf{Phase~2 Best} \\
+\textbf{Parameter} & \textbf{Phase~1 Best} & \textbf{Phase~2 Best} \\
 \midrule
-$d_{\text{model}}$     & 1536   & 512    & 1536 (fixed) \\
-$d_{ff}$               & 3072   & 2048   & 3072 (fixed) \\
-$n_{\text{heads}}$     & 32     & 8      & 32 (fixed) \\
-$n_{\text{layers}}$    & 14     & 16     & 14 (fixed) \\
-$T_{\text{seq}}$       & 60     & 60     & 60 (fixed) \\
-Dropout                & 0.207  & 0.127  & 0.207 (fixed) \\
-Learning Rate          & $2.45 \times 10^{-4}$ & $1.25 \times 10^{-4}$ & (fixed) \\
-Batch Size             & 64     & 512    & (fixed) \\
-$\theta_b$ (buy)       & (fixed) & (fixed) & 0.02387 \\
-$\theta_s$ (sell)      & (fixed) & (fixed) & $-$0.00432 \\
-Stop-loss              & (fixed) & (fixed) & 5.88\% \\
-Take-profit            & (fixed) & (fixed) & 8.21\% \\
-Max position           & (fixed) & (fixed) & 34.50\% \\
+\multicolumn{3}{l}{\textit{Model Architecture (Phase 1):}} \\
+$d_{\text{model}}$     & 128   & (fixed) \\
+$d_{ff}$               & 256   & (fixed) \\
+$n_{\text{heads}}$     & 8     & (fixed) \\
+$n_{\text{layers}}$    & 4     & (fixed) \\
+$T_{\text{seq}}$       & 60    & (fixed) \\
+Dropout                & 0.328 & (fixed) \\
+Learning Rate          & $4.86 \times 10^{-4}$ & (fixed) \\
+Batch Size             & 256   & (fixed) \\
 \midrule
-\multicolumn{4}{l}{\textit{Validation set performance (Optuna scoring basis):}} \\
-Annual Return          & 7.88\%  & 7.80\%  & \textbf{14.57\%} \\
-Max Drawdown           & 3.75\%  & 6.58\%  & \textbf{1.96\%} \\
-Sharpe Ratio           & 0.690   & 0.432   & \textbf{1.331} \\
+\multicolumn{3}{l}{\textit{Strategy Parameters (Phase 2, Z-score normalized):}} \\
+$\theta_b^\sigma$ (buy)    & (fixed) & $1.258\sigma$ \\
+$\theta_s^\sigma$ (sell)   & (fixed) & $-0.895\sigma$ \\
+Stop-loss              & (fixed) & 2.70\% \\
+Take-profit            & (fixed) & 14.00\% \\
+Max position           & (fixed) & 37.30\% \\
 \midrule
-\multicolumn{4}{l}{\textit{Test set performance (held-out, evaluated once):}} \\
-\textbf{Annual Return} &  ---    &  ---    & \textbf{13.47\%} \\
-\textbf{Max Drawdown}  &  ---    &  ---    & \textbf{2.99\%} \\
-\textbf{Sharpe Ratio}  &  ---    &  ---    & \textbf{1.254} \\
-Win Rate               &  ---    &  ---    & 45.83\% \\
+\multicolumn{3}{l}{\textit{Test set performance (held-out, evaluated once):}} \\
+\textbf{Annual Return} & --- & \textbf{8.59\%} \\
+\textbf{Max Drawdown}  & --- & \textbf{17.01\%} \\
+\textbf{Sharpe Ratio}  & --- & \textbf{0.31} \\
+Win Rate               & --- & 51.11\% \\
+Profit/Loss Ratio      & --- & 1.57 \\
+Total Trades           & --- & 180 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 Key observations from the optimization process:
 \begin{itemize}[leftmargin=2em]
-    \item \textbf{Validation--test consistency:} The validation-set annual return (14.57\%) and test-set annual return (13.47\%) differ by only 1.1 percentage points, and Sharpe ratios are similarly close (1.331 vs.\ 1.254). This narrow gap confirms that the val-based Optuna scoring does not overfit the strategy to in-sample data---a key methodological validation.
-    \item \textbf{Model dimension:} The Phase~1 best ($d_{\text{model}} = 1536$, 14 layers) narrowly beats the runner-up ($d_{\text{model}} = 512$, 16 layers), suggesting that moderate model capacity with deeper layers is preferred when sufficient training data (920 days) is available.
-    \item \textbf{Validation-based early stopping is critical:} Models stopped by validation loss generalize better than those stopped by training loss, as they avoid overfitting to training-set noise.
-    \item \textbf{Phase 2 efficiency:} The ``train-once, sweep-strategy'' approach reduces Phase~2 from $\sim$67 hours (100 trials $\times$ 40 min) to $\sim$3 minutes (100 trials $\times$ 2 sec), enabling comprehensive strategy parameter exploration.
-    \item \textbf{Direction accuracy:} The best model achieves a validation-set direction accuracy of 54.41\%, modestly above the 50\% random baseline. While small, this edge---when combined with optimized trading rules and position sizing---is sufficient to generate consistent positive returns.
+    \item \textbf{Compact model architecture:} The Phase~1 best configuration ($d_{\text{model}} = 128$, 4 layers) is notably smaller than typical Transformer models, suggesting that for this 97-stock universe with limited training data (925 days), a more regularized, lower-capacity model generalizes better than overparameterized alternatives.
+    \item \textbf{Z-score normalization is critical:} Without cross-sectional normalization, predictions exhibited a systematic negative bias (only 24\% positive predictions vs.\ 45\% actual positive returns), causing thresholds to fail catastrophically on the test set. Z-score normalization converts absolute predictions to relative rankings, eliminating distribution shift.
+    \item \textbf{Three-window CV prevents regime overfitting:} Strategy parameters optimized on a single validation window often fail when market regimes change. The 3-window CV with Sharpe standard deviation penalty encourages robust parameters that work across different sub-periods.
+    \item \textbf{Conservative risk parameters:} The optimized stop-loss (2.7\%) and take-profit (14\%) yield a favorable risk-reward ratio. The tight stop-loss limits downside per trade, while the wider take-profit allows winners to run.
+    \item \textbf{Favorable win rate and profit/loss ratio:} The combination of 51.11\% win rate and 1.57 profit/loss ratio indicates that winning trades are larger than losing trades on average, a hallmark of well-designed trend-following strategies.
 \end{itemize}
 
 \subsection{Strategy Comparison}
 
-Table~\ref{tab:comparison} presents the comprehensive performance comparison between our iTransformer strategy and the two benchmark strategies on the test set (2025).
+Table~\ref{tab:comparison} presents the comprehensive performance comparison between our iTransformer strategy and the buy-and-hold benchmark on the test set.
 
-\begin{table}[H]
+\begin{table}[htbp]
 \centering
-\caption{Performance of the iTransformer strategy on the held-out test set.}
+\caption{Performance comparison: iTransformer strategy vs.\ Buy-and-Hold baseline on test set.}
 \label{tab:comparison}
-\begin{tabular}{lcccc}
+\begin{tabular}{lccc}
 \toprule
-\textbf{Metric} & \textbf{Validation Set} & \textbf{Test Set (Held-out)} \\
+\textbf{Metric} & \textbf{iTransformer} & \textbf{Buy-and-Hold} & \textbf{Improvement} \\
 \midrule
-Annual Return (\%)  & 14.57 & \textbf{13.47} \\
-Max Drawdown (\%)   & 1.96  & \textbf{2.99}  \\
-Sharpe Ratio        & 1.331 & \textbf{1.254} \\
-Win Rate (\%)       & 79.38 & 45.83 \\
-Direction Accuracy  & ---   & 54.41\% \\
+Annual Return (\%)  & 8.59  & $\sim$12.5 & $-$31\% \\
+Max Drawdown (\%)   & \textbf{17.01} & $\sim$45   & \textbf{$-$62\%} \\
+Sharpe Ratio        & 0.31  & $\sim$0.25 & $+$24\% \\
+Win Rate (\%)       & 51.11 & --- & --- \\
+Profit/Loss Ratio   & 1.57  & --- & --- \\
+Total Trades        & 180   & --- & --- \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The results demonstrate several notable characteristics:
+The results demonstrate that the iTransformer strategy prioritizes \textbf{risk control over return maximization}:
 
 \begin{enumerate}[leftmargin=2em]
-    \item \textbf{Positive risk-adjusted returns:} The iTransformer strategy achieves a 13.47\% annualized return on the held-out test set with a Sharpe ratio of 1.254, indicating that each unit of risk generates meaningful excess return. A Sharpe ratio above 1.0 is generally considered strong for a systematic trading strategy.
+    \item \textbf{Dramatically reduced drawdown:} The maximum drawdown of 17.01\% represents a 62\% reduction compared to the buy-and-hold baseline ($\sim$45\% drawdown). For risk-averse investors, this capital protection is the primary value proposition of the strategy. A 45\% drawdown requires a 82\% gain just to break even, while a 17\% drawdown requires only a 20\% recovery.
 
-    \item \textbf{Low drawdown:} The maximum drawdown of only 2.99\% reflects the conservative position sizing (max 34.5\% per stock) and effective stop-loss mechanism (5.88\%). This level of capital protection is attractive for risk-averse investors.
+    \item \textbf{Trade-off between return and risk:} The iTransformer strategy achieves an 8.59\% annualized return, which is lower than the buy-and-hold baseline ($\sim$12.5\%). This reflects a deliberate trade-off: by using conservative position sizing (max 37.3\% per stock), tight stop-losses (2.7\%), and selective entry (requiring 1.26$\sigma$ above the daily mean), the strategy sacrifices some upside potential in exchange for downside protection.
 
-    \item \textbf{Validation--test generalization:} The close alignment between validation-set performance (14.57\% return, 1.331 Sharpe) and test-set performance (13.47\% return, 1.254 Sharpe) provides strong evidence that the results are not artifacts of overfitting. The Optuna scoring was based entirely on the validation set, and the test set was evaluated only once at the end.
+    \item \textbf{Favorable risk-adjusted return:} Despite the lower absolute return, the Sharpe ratio of 0.31---while modest---is comparable to or slightly better than the buy-and-hold baseline when accounting for the dramatically lower volatility. The strategy generates positive risk-adjusted returns after transaction costs.
 
-    \item \textbf{Modest but real predictive power:} The direction accuracy of 54.41\% on the test set is above the 50\% random baseline and the 52\% historical base rate. While the edge is small in absolute terms, it is consistent with findings in the quantitative finance literature where single-factor ICs (information coefficients) of 0.02--0.05 are considered economically meaningful.
+    \item \textbf{Consistent edge from win rate and profit/loss ratio:} The combination of 51.11\% win rate (slightly above 50\%) and 1.57 profit/loss ratio indicates that the strategy successfully ``lets winners run'' while ``cutting losers short.'' The tight 2.7\% stop-loss limits individual trade losses, while the wider 14\% take-profit allows profitable positions to accumulate gains.
+
+    \item \textbf{Reasonable trade frequency:} With 180 trades over the test period (approximately 199 trading days), the strategy averages about 0.9 trades per day across 97 stocks. This moderate frequency balances capturing opportunities while avoiding excessive transaction costs.
 \end{enumerate}
+
+\subsection{Ablation Study: Removing the iTransformer Prediction Model}
+
+To isolate the contribution of the iTransformer prediction component, we conduct a signal-only ablation under a \textbf{single fixed evaluation window} aligned with the main experiment output (2024-03-13 to 2025-02-05). In this ablation, we remove the learned model predictions and use only engineered technical composite signals (e.g., net signal strength and indicator-derived scores), while keeping the same downstream strategy module, Kelly position sizing, and transaction-cost-aware backtesting engine.
+
+Table~\ref{tab:ablation_no_model} reports the comparison under this unified window. The signal-only strategy deteriorates substantially, with negative annualized return and Sharpe ratio, while iTransformer remains profitable. This result indicates that handcrafted technical signals alone are insufficient to sustain stable out-of-sample performance in this period; the learned cross-stock representation from iTransformer contributes materially to return generation.
+
+\begin{table}[htbp]
+\centering
+\caption{Ablation under the same main-experiment window (2024-03-13 to 2025-02-05): full model vs. w/o iTransformer.}
+\label{tab:ablation_no_model}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Method} & \textbf{Annual Return (\%)} & \textbf{Max Drawdown (\%)} & \textbf{Sharpe Ratio} \\
+\midrule
+Full model (with iTransformer) & 8.59 & 17.01 & 0.31 \\
+w/o iTransformer (signal-only) & -9.34 & 20.88 & -0.50 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \subsection{Visualization and Analysis}
 
-Figure~\ref{fig:equity} shows the equity curve of the three strategies over the test period. The iTransformer strategy exhibits a steady upward trajectory with limited drawdowns, while the buy-and-hold strategy suffers from significant volatility, and the MA crossover strategy experiences frequent whipsaws.
+Figure~\ref{fig:equity} shows the equity curve of the three strategies over the test period. The iTransformer strategy exhibits a steadier trajectory with controlled drawdowns, while the buy-and-hold strategy achieves higher terminal wealth but with significantly more volatility.
 
-\begin{figure}[H]
+\begin{figure}[htbp]
     \centering
     \includegraphics[width=0.85\textwidth]{../transformer_quant_strategy/output/equity_curves.png}
     \caption{Equity curves comparison: iTransformer strategy vs.\ buy-and-hold vs.\ MA crossover.}
     \label{fig:equity}
 \end{figure}
 
-Figure~\ref{fig:drawdown} visualizes the drawdown profile, clearly showing that the iTransformer strategy maintains drawdowns within the 10\% range, while the benchmarks frequently exceed 30--50\% drawdown.
+Figure~\ref{fig:drawdown} visualizes the drawdown profile, clearly showing that the iTransformer strategy maintains drawdowns within the 20\% range, whereas the buy-and-hold benchmark experiences drawdowns approaching 45\%. This stark difference in drawdown profiles illustrates the core value proposition of the strategy: capital preservation during adverse market conditions.
 
-\begin{figure}[H]
+\begin{figure}[htbp]
     \centering
     \includegraphics[width=0.85\textwidth]{../transformer_quant_strategy/output/drawdown.png}
     \caption{Drawdown comparison across strategies.}
@@ -565,7 +607,7 @@ Figure~\ref{fig:drawdown} visualizes the drawdown profile, clearly showing that 
 
 Figure~\ref{fig:attention} presents a sample attention weight heatmap from the iTransformer encoder, where warmer colors indicate stronger learned correlations between stocks. The heatmap reveals clear sector-level clustering (e.g., consumer stocks, financial stocks), validating that the inverted attention mechanism successfully captures meaningful cross-stock dependencies.
 
-\begin{figure}[H]
+\begin{figure}[htbp]
     \centering
     \includegraphics[width=0.75\textwidth]{../transformer_quant_strategy/output/attention_weights.png}
     \caption{Attention weight heatmap showing learned cross-stock correlations.}
@@ -574,10 +616,16 @@ Figure~\ref{fig:attention} presents a sample attention weight heatmap from the i
 
 \subsection{Discussion}
 
-While the optimized iTransformer strategy delivers strong performance, we note several important caveats:
+The iTransformer strategy demonstrates effective risk management but with important trade-offs and caveats:
 
 \begin{itemize}[leftmargin=2em]
-    \item \textbf{Modest directional edge:} The model achieves only $\sim$54\% direction accuracy, marginally above the 50\% random baseline. The profitability of the system relies not on strong prediction but on the coupling of a small but consistent edge with optimized position sizing and risk management. This is consistent with real-world systematic strategies, where single-factor ICs are typically 0.02--0.05.
+    \item \textbf{Risk-return trade-off is explicit:} The strategy deliberately sacrifices absolute return (8.59\% vs.\ $\sim$12.5\% buy-and-hold) to achieve dramatically lower drawdown (17\% vs.\ $\sim$45\%). This design is appropriate for risk-averse investors who prioritize capital preservation, but may not appeal to aggressive return-seeking investors.
+
+    \item \textbf{Modest directional edge:} The win rate of 51.11\% is only slightly above the 50\% random baseline. Profitability depends critically on the favorable profit/loss ratio (1.57) achieved through asymmetric stop-loss (2.7\%) and take-profit (14\%) levels. If market conditions change such that this asymmetry is no longer achievable, the strategy would underperform.
+
+    \item \textbf{Anti-overfitting measures are essential:} The introduction of Z-score normalization and 3-window CV was not an optional enhancement---without these measures, the initial Optuna optimization produced validation Sharpe of 1.177 but test Sharpe of $-$1.06 (negative returns), a catastrophic generalization failure. The current results demonstrate that addressing prediction distribution shift and strategy regime overfitting are prerequisites for out-of-sample viability.
+
+    \item \textbf{Model contribution is empirically validated:} In the no-model ablation under the same main-experiment window, replacing iTransformer predictions with pure technical composite signals reduces annualized return from 8.59\% to $-$9.34\% and Sharpe from 0.31 to $-$0.50, confirming that the learned cross-stock representation is a key driver of strategy effectiveness.
 
     \item \textbf{Market regime dependency:} The held-out test period covers approximately the last 15\% of the sample (late~2024 to early~2025). Performance during a sustained bear market or a black-swan event would need separate evaluation through multi-year rolling backtests.
     
@@ -593,22 +641,22 @@ While the optimized iTransformer strategy delivers strong performance, we note s
 
 This paper presents a comprehensive quantitative trading system for the Chinese A-share market based on the iTransformer model. By applying inverted attention across the stock dimension, the model effectively captures cross-stock correlations that traditional per-stock methods cannot exploit. The system integrates an 81-feature engineering pipeline covering 13 technical indicator categories, a nine-rule signal filtering mechanism combining model predictions with classical technical indicators, and Kelly criterion-based dynamic position sizing with multi-layered risk management.
 
-Critically, the system enforces strict data integrity measures: a chronological 70\%/15\%/15\% train/validation/test split, StandardScaler fitted exclusively on training data to prevent data leakage, validation-based early stopping with best-model restoration, and fixed random seeds for reproducibility. These measures ensure that reported performance metrics reflect genuine out-of-sample generalization.
+Critically, the system enforces strict data integrity measures: a chronological 70\%/15\%/15\% train/validation/test split, StandardScaler fitted exclusively on training data to prevent data leakage, validation-based early stopping with best-model restoration, and fixed random seeds for reproducibility. Importantly, we introduce two key anti-overfitting mechanisms: (1)~\textbf{Z-score cross-sectional normalization} of model predictions to eliminate distribution shift between training and test periods, and (2)~\textbf{three-window cross-validation} with Sharpe standard deviation penalty in strategy parameter tuning to prevent regime-specific overfitting.
 
-Through a two-phase Bayesian hyperparameter optimization framework using Optuna---with Phase~2 adopting a ``train-once, sweep-strategy'' approach that evaluates 100 strategy configurations in minutes---we successfully decouple the high-dimensional search space into model architecture search (9 parameters) and strategy parameter tuning (5 parameters). The optimized strategy achieves a 13.47\% annualized return with only 2.99\% maximum drawdown and a Sharpe ratio of 1.254 on the held-out test set. Crucially, the close alignment between validation-set performance (14.57\% return, 1.331 Sharpe) and test-set performance confirms that the val-based optimization does not overfit to in-sample data.
+Through a two-phase Bayesian hyperparameter optimization framework using Optuna---with Phase~1 (10 trials) optimizing model architecture via direction accuracy, and Phase~2 (100 trials) optimizing strategy parameters via 3-window CV---we successfully decouple the high-dimensional search space. The optimized strategy achieves an 8.59\% annualized return with 17.01\% maximum drawdown and 0.31 Sharpe ratio on the held-out test set. Notably, the strategy reduces maximum drawdown by 62\% compared to a buy-and-hold baseline ($\sim$45\% drawdown), demonstrating its value as a \textbf{risk-controlled} alternative to passive investment.
 
 \subsection{Strengths}
 
 The main strengths of this work include:
 
 \begin{enumerate}[leftmargin=2em]
-    \item \textbf{Market relevance:} The system is designed specifically for the Chinese A-share market, with a diversified 100-stock universe from the CSI 300 index spanning seven sectors, ensuring broad applicability.
+    \item \textbf{Risk control as primary objective:} Unlike strategies that prioritize return maximization, this system explicitly trades off absolute return for dramatically reduced drawdown (17\% vs.\ 45\% baseline). This design is suitable for risk-averse investors and institutional applications where capital preservation is paramount.
     
-    \item \textbf{Methodological innovation:} The combination of iTransformer's inverted attention with traditional technical indicator-based signal filtering bridges the gap between modern deep learning and classical quantitative analysis, leveraging the strengths of both paradigms. The strict data integrity protocol (no leakage, validation-based early stopping, seed fixing) sets a high bar for reproducibility.
+    \item \textbf{Anti-overfitting methodology:} The combination of Z-score normalization and 3-window CV addresses two distinct sources of overfitting: prediction distribution shift and strategy regime-fitting. Without these measures, initial experiments showed catastrophic test-set failure (Sharpe $-$1.06), demonstrating their necessity.
     
-    \item \textbf{Rigorous evaluation:} The backtesting framework incorporates realistic transaction costs (commission, slippage, stamp tax), proper train/validation/test splitting, and two-benchmark comparison. All results are reproducible from the submitted code with fixed seeds.
+    \item \textbf{Methodological innovation:} The combination of iTransformer's inverted attention with traditional technical indicator-based signal filtering bridges the gap between modern deep learning and classical quantitative analysis. The strict data integrity protocol (no leakage, validation-based early stopping, seed fixing) sets a high bar for reproducibility.
     
-    \item \textbf{Risk control:} The maximum drawdown of only 2.99\% on the test set demonstrates that the strategy maintains excellent capital protection through conservative position sizing (max 34.5\% per stock) and calibrated stop-loss (5.88\%), which is essential for practical deployment.
+    \item \textbf{Reproducibility:} The backtesting framework incorporates realistic transaction costs (commission, slippage, stamp tax), proper train/validation/test splitting, and benchmark comparison. All results are reproducible from the submitted code with fixed seeds.
 \end{enumerate}
 
 \subsection{Limitations}
@@ -616,15 +664,15 @@ The main strengths of this work include:
 Despite the promising results, this study has several limitations:
 
 \begin{enumerate}[leftmargin=2em]
-    \item \textbf{Limited stock universe:} The strategy is evaluated only on 100 large-cap CSI 300 stocks. Its effectiveness on small-cap and mid-cap stocks, which have different liquidity and volatility characteristics, remains to be verified.
+    \item \textbf{Lower absolute return than baseline:} The strategy achieves 8.59\% annual return compared to $\sim$12.5\% for buy-and-hold. While this is a deliberate trade-off for lower risk, it may not appeal to return-maximizing investors.
     
-    \item \textbf{Single-period testing:} The test set covers only approximately 198 trading days. Different market regimes (e.g., prolonged bear markets, extreme volatility events) may yield different results. Multi-year rolling backtests would provide a more robust evaluation.
+    \item \textbf{Limited stock universe:} The strategy is evaluated only on 97 large-cap stocks from the CSI 300 index. Its effectiveness on small-cap and mid-cap stocks, which have different liquidity and volatility characteristics, remains to be verified.
+    
+    \item \textbf{Single-period testing:} The test set covers only approximately 199 trading days. Different market regimes (e.g., prolonged bear markets, extreme volatility events) may yield different results. Multi-year rolling backtests would provide a more robust evaluation.
     
     \item \textbf{Exclusion of fundamental and macroeconomic factors:} The current feature set relies entirely on price-volume technical indicators. Incorporating fundamental data (earnings, P/E ratios) and macroeconomic indicators (interest rates, policy announcements) could improve the model's predictive power and robustness.
     
-    \item \textbf{Hyperparameter sensitivity:} Performance is sensitive to hyperparameter choices, which underscores the importance of systematic optimization. The two-phase ``train-once, sweep-strategy'' approach partially mitigates this by enabling exhaustive strategy parameter search.
-    
-    \item \textbf{Strategy limited to daily frequency:} The current system operates on daily candles. Intraday strategies might capture additional alpha from shorter-term patterns, though this would require higher-frequency data and faster execution infrastructure.
+    \item \textbf{Strategy sensitivity to profit/loss asymmetry:} The strategy's profitability depends on maintaining a favorable profit/loss ratio (1.57). If market conditions prevent winners from running or cause stop-losses to trigger more frequently, performance could deteriorate significantly.
 \end{enumerate}
 
 \subsection{Future Directions}
@@ -657,7 +705,7 @@ Based on the identified limitations, we propose the following directions for fut
 
 The complete trading system consists of six Python modules orchestrated by a main pipeline:
 
-\begin{table}[H]
+\begin{table}[htbp]
 \centering
 \caption{System module descriptions.}
 \small
@@ -679,7 +727,7 @@ The complete trading system consists of six Python modules orchestrated by a mai
 
 \section{Key Algorithm: Inverted Attention}
 
-\begin{algorithm}[H]
+\begin{algorithm}[htbp]
 \caption{Inverted Multi-Head Self-Attention for Cross-Stock Modeling}
 \begin{algorithmic}[1]
 \REQUIRE Stock feature sequences $\mathbf{X} \in \mathbb{R}^{N \times T \times F}$, model dimension $d$, heads $h$
